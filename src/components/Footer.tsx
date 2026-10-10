@@ -55,8 +55,8 @@ export const Footer: React.FC<FooterProps> = ({
               Modern African skincare, pediatrician-tested eczema relief balms, targeted hyperpigmentation treatments, pure collagen peptides, and organic superfoods crafted with botanical integrity.
             </p>
             <div className="pt-2 text-xs font-mono text-stone-400 space-y-1">
-              <div>Labs & Distribution: Johannesburg · Pretoria · Durban</div>
-              <div>Concierge: care@phethagatsa.co.za · Tel: +27 (0)11 832 9400</div>
+              <div>PHETHAGATSA SOLUTIONS: Bronkhostspruit -Witbank -Rustenburg</div>
+              <div>Contacymts care@phethagats.ck.za - Tel +27 (0)82 956 4472</div>
             </div>
           </div>
 

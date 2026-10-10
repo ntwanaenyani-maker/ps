@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ShoppingBag, Heart, Database, Menu, X, User, MessageCircle, Download } from 'lucide-react';
+import { Search, ShoppingBag, Heart, Database, Menu, X, User, Download } from 'lucide-react';
 import { Currency, UserAccount } from '../types/store';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 
@@ -15,8 +15,6 @@ interface HeaderProps {
   onOpenSearch: () => void;
   onOpenDatabaseModal: () => void;
   onOpenOrderLookup: () => void;
-  onOpenAdmin: () => void;
-  onOpenStarterDownload?: () => void;
   onSelectCategory: (cat: string) => void;
 }
 
@@ -32,8 +30,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSearch,
   onOpenDatabaseModal,
   onOpenOrderLookup,
-  onOpenAdmin,
-  onOpenStarterDownload,
   onSelectCategory,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -60,13 +56,6 @@ export const Header: React.FC<HeaderProps> = ({
           className="underline hover:text-white transition-colors cursor-pointer"
         >
           Track An Order
-        </button>
-        <span className="text-stone-500">·</span>
-        <button
-          onClick={onOpenAdmin}
-          className="px-2 py-0.5 rounded bg-emerald-800 hover:bg-emerald-700 text-white font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-        >
-          <span>⚡ Admin Dashboard</span>
         </button>
       </div>
 
@@ -103,25 +92,37 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => handleNavClick('skincare-kits')}
             className="hover:text-stone-950 transition-colors cursor-pointer"
           >
-            Ritual Sets
+            Pigmentation Transformation Sets
           </button>
           <button
             onClick={() => handleNavClick('supplements')}
             className="hover:text-stone-950 transition-colors cursor-pointer"
           >
-            Collagen & Nutricosmetics
+            Collagen Peptides & Skin Gummies
           </button>
           <button
             onClick={() => handleNavClick('exfoliator')}
             className="hover:text-stone-950 transition-colors cursor-pointer"
           >
-            Exfoliating Scrubs
+            Fofa Exfoliating Scrub
           </button>
           <button
             onClick={() => handleNavClick('superfood')}
             className="hover:text-stone-950 transition-colors cursor-pointer"
           >
-            Organic Superfoods
+            Organic Chia Seeds
+          </button>
+          <button
+            onClick={() => handleNavClick('health-foods')}
+            className="hover:text-stone-950 transition-colors cursor-pointer"
+          >
+            Health Foods
+          </button>
+          <button
+            onClick={() => handleNavClick('accessories')}
+            className="hover:text-stone-950 transition-colors cursor-pointer"
+          >
+            Canvas & Leather Totes
           </button>
         </nav>
 
@@ -141,27 +142,6 @@ export const Header: React.FC<HeaderProps> = ({
               <option value="GBP">GBP (£)</option>
             </select>
           </div>
-
-          {/* Admin Dashboard Switcher */}
-          <button
-            onClick={onOpenAdmin}
-            title="Open Admin Management Dashboard"
-            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-mono font-bold text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-xs transition-colors cursor-pointer"
-          >
-            <span>⚡ Admin</span>
-          </button>
-
-          {/* Download Starter Monorepo */}
-          {onOpenStarterDownload && (
-            <button
-              onClick={onOpenStarterDownload}
-              title="Download Phethagatsa Web App Starter (Monorepo ZIP)"
-              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xs transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5 text-amber-800" />
-              <span>Download Starter</span>
-            </button>
-          )}
 
           {/* Database Studio Trigger */}
           <button
@@ -267,7 +247,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => handleNavClick('skincare')}
               className="text-left py-1 hover:text-stone-950 cursor-pointer"
             >
-              Skincare & Dark Thigh Cream
+              Skincare & Body
             </button>
             <button
               onClick={() => handleNavClick('skincare-kits')}
@@ -293,13 +273,25 @@ export const Header: React.FC<HeaderProps> = ({
             >
               Organic Chia Seeds
             </button>
+            <button
+              onClick={() => handleNavClick('health-foods')}
+              className="text-left py-1 hover:text-stone-950 cursor-pointer"
+            >
+              Health Foods
+            </button>
+            <button
+              onClick={() => handleNavClick('accessories')}
+              className="text-left py-1 hover:text-stone-950 cursor-pointer"
+            >
+              Canvas & Leather Totes
+            </button>
 
             <div className="pt-2 border-t border-stone-200 flex flex-col space-y-2 text-xs font-mono text-stone-600">
               <button
                 onClick={onOpenOrderLookup}
                 className="text-left py-1 hover:text-stone-950 cursor-pointer"
               >
-                Track Placed Order
+                Track Order
               </button>
               <button
                 onClick={() => {
@@ -317,7 +309,6 @@ export const Header: React.FC<HeaderProps> = ({
                 rel="noopener noreferrer"
                 className="text-left py-1 text-emerald-800 font-semibold flex items-center gap-1.5"
               >
-                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                 <span>WhatsApp Customer Line</span>
               </a>
             </div>

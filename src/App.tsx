@@ -18,15 +18,11 @@ import { CartBar } from './components/CartBar';
 import { StorySection } from './components/StorySection';
 import { FAQSection } from './components/FAQSection';
 import { Footer } from './components/Footer';
-import { AdminDashboard } from './components/admin/AdminDashboard';
 import { StarterDownloadModal } from './components/StarterDownloadModal';
 import { Download } from 'lucide-react';
 import { addRecentView } from './services/recentViews';
 
 export default function App() {
-  // App Mode: Customer Storefront vs Admin Portal
-  const [appMode, setAppMode] = useState<'storefront' | 'admin'>('storefront');
-
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
@@ -164,57 +160,10 @@ export default function App() {
   const cartTotalItems = cart.reduce((total, item) => total + item.quantity, 0);
   const cartTotalZAR = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
 
-  // If in Admin Dashboard mode, render full-featured Admin App
-  if (appMode === 'admin') {
-    return (
-      <div className="min-h-screen bg-[#0f1713] text-stone-100 flex flex-col">
-        {/* Top App Mode Bar */}
-        <div className="bg-[#14221a] border-b border-emerald-900/40 px-4 py-2 flex items-center justify-between text-xs font-mono">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-emerald-300 font-bold">Admin Portal Active</span>
-            <span className="text-stone-500">·</span>
-            <span className="text-stone-400">Manage Products, Orders & Analytics</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsStarterModalOpen(true)}
-              className="px-3 py-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download Starter (.ZIP)</span>
-            </button>
-            <button
-              onClick={() => setAppMode('storefront')}
-              className="px-3.5 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-            >
-              <span>🛍️ Switch to Customer Storefront</span>
-            </button>
-          </div>
-        </div>
-
-        <AdminDashboard
-          onSwitchToStorefront={() => setAppMode('storefront')}
-          onOpenProductView={(p) => {
-            setAppMode('storefront');
-            setQuickViewProduct(p);
-          }}
-        />
-
-        {/* Starter Download Modal inside Admin */}
-        <StarterDownloadModal
-          isOpen={isStarterModalOpen}
-          onClose={() => setIsStarterModalOpen(false)}
-        />
-      </div>
-    );
-  }
-
-  // Otherwise render Customer Storefront App
+  // Main Storefront App
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 font-sans selection:bg-stone-900 selection:text-white flex flex-col">
-      {/* Top Dual-App Quick Switcher Bar */}
+      {/* Top Dual-App Quick Switcher Bar (Simplified for Storefront Only) */}
       <div className="bg-[#14221a] text-stone-200 text-xs py-1.5 px-4 flex items-center justify-between border-b border-emerald-900/40 font-mono">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -232,21 +181,6 @@ export default function App() {
             <span className="hidden sm:inline">Download Starter</span>
             <span className="sm:hidden">Starter</span>
           </button>
-
-          <div className="flex items-center bg-black/40 p-0.5 rounded-md border border-emerald-900/60">
-            <button
-              onClick={() => setAppMode('storefront')}
-              className="px-3 py-1 rounded text-[11px] font-bold uppercase transition-all cursor-pointer bg-emerald-700 text-white shadow-xs"
-            >
-              🛍️ Customer Storefront
-            </button>
-            <button
-              onClick={() => setAppMode('admin')}
-              className="px-3 py-1 rounded text-[11px] font-bold uppercase transition-all cursor-pointer text-stone-400 hover:text-white"
-            >
-              ⚡ Admin Dashboard
-            </button>
-          </div>
         </div>
       </div>
 
@@ -263,8 +197,6 @@ export default function App() {
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenDatabaseModal={() => setIsDatabaseModalOpen(true)}
         onOpenOrderLookup={() => setIsOrderLookupOpen(true)}
-        onOpenAdmin={() => setAppMode('admin')}
-        onOpenStarterDownload={() => setIsStarterModalOpen(true)}
         onSelectCategory={(cat) => setSelectedCategory(cat as Category)}
       />
 
@@ -373,59 +305,57 @@ export default function App() {
           onClose={() => setIsAccountOpen(false)}
           onAddToCart={(p) => handleAddToCart(p, 1)}
           onSelectProduct={(p) => setQuickViewProduct(p)}
-          onLogout={handleLogout}
+          onRequireLogin={() => setIsAccountOpen(true)}
         />
       )}
 
-      {/* Quick Keyboard Search Modal */}
+      {/* Starter Download Modal */}
+      <StarterDownloadModal
+        isOpen={isStarterModalOpen}
+        onClose={() => setIsStarterModalOpen(false)}
+      />
+
+      {/* Search Modal */}
       <SearchModal
         isOpen={isSearchOpen}
         products={products}
         currency={currency}
         onClose={() => setIsSearchOpen(false)}
-        onSelectProduct={(p) => setQuickViewProduct(p)}
+        onSelectProduct={(p) => {
+          setQuickViewProduct(p);
+          setIsSearchOpen(false);
+        }}
       />
 
-      {/* Single-Page Checkout Modal with South African EFT Pay Instructions */}
+      {/* Checkout Modal */}
       <CheckoutModal
         isOpen={isCheckoutOpen}
         cart={cart}
         currency={currency}
-        discountPercent={checkoutDiscount}
-        currentUser={currentUser}
+        discount={checkoutDiscount}
         onClose={() => setIsCheckoutOpen(false)}
-        onOrderCompleted={handleOrderCompleted}
+        onOrderComplete={handleOrderCompleted}
       />
 
-      {/* Order Confirmation Receipt Modal with Banking POP */}
-      <OrderConfirmationModal
-        order={completedOrder}
-        currency={currency}
-        onClose={() => setCompletedOrder(null)}
-        onOpenDatabase={() => {
-          setCompletedOrder(null);
-          setIsDatabaseModalOpen(true);
-        }}
-      />
+      {/* Order Confirmation Modal */}
+      {completedOrder && (
+        <OrderConfirmationModal
+          order={completedOrder}
+          onClose={() => setCompletedOrder(null)}
+        />
+      )}
 
-      {/* Order Tracking Lookup Modal */}
+      {/* Order Lookup Modal */}
       <OrderLookupModal
         isOpen={isOrderLookupOpen}
-        currency={currency}
         onClose={() => setIsOrderLookupOpen(false)}
       />
 
-      {/* Free Database Studio Inspector */}
+      {/* Database Modal */}
       <DatabaseModal
         isOpen={isDatabaseModalOpen}
         onClose={() => setIsDatabaseModalOpen(false)}
       />
-
-      {/* Starter Monorepo Download Modal */}
-      <StarterDownloadModal
-        isOpen={isStarterModalOpen}
-        onClose={() => setIsStarterModalOpen(false)}
-      />
     </div>
   );
-}
+};
