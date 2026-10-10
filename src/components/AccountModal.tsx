@@ -31,10 +31,20 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   onViewOrder,
 }) => {
   const [activeTab, setActiveTab] = useState<'wishlist' | 'orders' | 'profile'>('wishlist');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   // Login form state - defaults to South African account
   const [loginName, setLoginName] = useState('Fidel Kekana');
   const [loginEmail, setLoginEmail] = useState('fidelkekana@gmail.com');
+  const [loginPassword, setLoginPassword] = useState('dota');
+
+  // Register form state
+  const [registerName, setRegisterName] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirm, setRegisterConfirm] = useState('');
+  const [registerError, setRegisterError] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   if (!isOpen) return null;
 
@@ -46,8 +56,32 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
   const handleLoginFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginName.trim() && loginEmail.trim()) {
-      onLogin(loginName, loginEmail);
+    if (authMode === 'login') {
+      if (loginName.trim() && loginEmail.trim()) {
+        try {
+          onLogin(loginName, loginEmail, loginPassword);
+        } catch (error: any) {
+          setLoginError(error.message || 'Authentication failed');
+        }
+      }
+    } else {
+      // Registration
+      if (registerName.trim() && registerEmail.trim() && registerPassword.trim()) {
+        if (registerPassword !== registerConfirm) {
+          setRegisterError('Passwords do not match');
+          return;
+        }
+        try {
+          const newUser = dbService.registerUser(registerName.trim(), registerEmail.trim().toLowerCase(), registerPassword);
+          setRegisterError('');
+          setLoginError('');
+          setAuthMode('login');
+          // Auto-login the new user
+          onLogin(newUser.name, newUser.email, registerPassword);
+        } catch (error: any) {
+          setRegisterError(error.message || 'Registration failed');
+        }
+      }
     }
   };
 
@@ -283,56 +317,172 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               )}
             </div>
           </>
-        ) : (
-          /* Sign In Form View */
-          <div className="p-8 max-w-md mx-auto my-auto w-full">
-            <div className="text-center mb-6">
-              <h3 className="text-lg font-bold text-stone-950 font-serif">
-                Sign In to Member Profile
-              </h3>
-              <p className="text-xs text-stone-500 font-mono mt-1">
-                Access your personal architectural wishlist and registered orders across sessions.
-              </p>
+                  <>
+            {/* Auth Mode Tabs */}
+            <div className="p-5 border-b border-stone-200 bg-stone-50 flex items-center justify-center gap-4 text-xs font-mono uppercase tracking-wider">
+              <button
+                onClick={() => setAuthMode('login')}
+                className={`px-4 py-2 rounded-xs transition-colors cursor-pointer ${
+                  authMode === 'login' ? 'bg-stone-900 text-white font-semibold' : 'text-stone-600 hover:text-stone-950'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => setAuthMode('register')}
+                className={`px-4 py-2 rounded-xs transition-colors cursor-pointer ${
+                  authMode === 'register' ? 'bg-stone-900 text-white font-semibold' : 'text-stone-600 hover:text-stone-950'
+                }`}
+              >
+                Create Account
+              </button>
             </div>
 
-            <form onSubmit={handleLoginFormSubmit} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Your Name</label>
-                <input
-                  type="text"
-                  required
-                  value={loginName}
-                  onChange={(e) => setLoginName(e.target.value)}
-                  placeholder="e.g. Julian Mercer"
-                  className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
-                />
+            {/* Login Form */}
+            {authMode === 'login' && (
+              <div className="p-8 max-w-md mx-auto my-auto w-full">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-bold text-stone-950 font-serif">
+                    Sign In to Member Profile
+                  </h3>
+                  <p className="text-xs text-stone-500 font-mono mt-1">
+                    Access your personal architectural wishlist and registered orders across sessions.
+                  </p>
+                </div>
+
+                {loginError && (
+                  <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xs text-rose-700 text-xs">
+                    {loginError}
+                  </div>
+                )}
+
+                <form onSubmit={handleLoginFormSubmit} className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Your Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={loginName}
+                      onChange={(e) => setLoginName(e.target.value)}
+                      placeholder="e.g. Julian Mercer"
+                      className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="collector@atelier.design"
+                      className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-stone-950 hover:bg-stone-850 text-white font-mono uppercase tracking-wider text-xs font-medium rounded-xs transition-colors cursor-pointer mt-4"
+                  >
+                    Sign In / Access Wishlist
+                  </button>
+
+                  <p className="text-[10px] text-stone-400 font-mono text-center pt-2">
+                    Simulated authenticated collector account with local database persistence.
+                  </p>
+                </form>
               </div>
+            )}
 
-              <div>
-                <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  required
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="collector@atelier.design"
-                  className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
-                />
+            {/* Register Form */}
+            {authMode === 'register' && (
+              <div className="p-8 max-w-md mx-auto my-auto w-full">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-bold text-stone-950 font-serif">
+                    Create New Account
+                  </h3>
+                  <p className="text-xs text-stone-500 font-mono mt-1">
+                    Join our exclusive collector community with instant access.
+                  </p>
+                </div>
+
+                {registerError && (
+                  <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xs text-rose-700 text-xs">
+                    {registerError}
+                  </div>
+                )}
+
+                <form onSubmit={handleLoginFormSubmit} className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Your Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={registerName}
+                      onChange={(e) => setRegisterName(e.target.value)}
+                      placeholder="e.g. Julian Mercer"
+                      className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      value={registerEmail}
+                      onChange={(e) => setRegisterEmail(e.target.value)}
+                      placeholder="collector@atelier.design"
+                      className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
+                      placeholder="Create a password"
+                      className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Confirm Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={registerConfirm}
+                      onChange={(e) => setRegisterConfirm(e.target.value)}
+                      placeholder="Confirm your password"
+                      className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-stone-950 hover:bg-stone-850 text-white font-mono uppercase tracking-wider text-xs font-medium rounded-xs transition-colors cursor-pointer mt-4"
+                  >
+                    Create Account
+                  </button>
+                </form>
               </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 bg-stone-950 hover:bg-stone-850 text-white font-mono uppercase tracking-wider text-xs font-medium rounded-xs transition-colors cursor-pointer mt-4"
-              >
-                Sign In / Access Wishlist
-              </button>
-
-              <p className="text-[10px] text-stone-400 font-mono text-center pt-2">
-                Simulated authenticated collector account with local database persistence.
-              </p>
-            </form>
-          </div>
-        )}
+            )}
       </div>
     </div>
   );

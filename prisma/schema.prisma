@@ -1,43 +1,17 @@
 // Prisma Schema for Phethagatsa Solutions Modern African Skincare
-// Supports free relational databases (Supabase, Neon PostgreSQL) and document databases (MongoDB Atlas Free M0)
+// Supports MongoDB Atlas Free Tier
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql" // Switch to "mongodb" if using free MongoDB Atlas
-  url      = env("DATABASE_URL")
+  provider = "mongodb"
+  url      = env("MONGODB_URI")
 }
 
-enum Role {
-  CUSTOMER
-  ADMIN
-  STAFF
-}
-
-enum MemberTier {
-  BRONZE
-  SILVER
-  GOLD
-  VIP_RADIANT
-}
-
-enum OrderStatus {
-  PENDING
-  PROCESSING
-  SHIPPED
-  DELIVERED
-  CANCELLED
-}
-
-enum PaymentMethod {
-  CARD
-  INSTANT_EFT
-  PAYFAST
-  CASH_ON_DELIVERY
-  WHATSAPP_DIRECT
-}
+// Google AI / Gemini Configuration
+// apiKey is set via environment: al-e9HeVjsPH6ZOrnjGVZ8dStW6chZ-IYO3AOtUV9-PCxF
 
 model User {
   id               String           @id @default(uuid())

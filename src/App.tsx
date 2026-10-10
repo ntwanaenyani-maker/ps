@@ -117,8 +117,8 @@ export default function App() {
     }
   };
 
-  const handleLogin = (name: string, email: string) => {
-    const user = dbService.loginUser(name, email);
+  const handleLogin = (name: string, email: string, password: string) => {
+    const user = dbService.loginUser(name, email, password);
     setCurrentUser(user);
     setWishlistIds(user.wishlistIds);
   };

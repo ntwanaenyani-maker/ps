@@ -111,6 +111,17 @@ class FreeDatabaseService {
             memberSince: 'June 2025',
             wishlistIds: ['soothing-eczema-barrier-balm'],
           },
+          {
+            id: 'usr-admin-001',
+            name: 'Admin Manager',
+            email: 'admin@admin.com',
+            password: 'dota',
+            memberTier: 'Admin',
+            loyaltyPoints: 999,
+            totalOrdersCount: 0,
+            memberSince: '2026-10-01',
+            wishlistIds: [],
+          },
         ];
         localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(initialCustomers));
       }
@@ -289,19 +300,25 @@ class FreeDatabaseService {
     return updated;
   }
 
-  public loginUser(name: string, email: string): UserAccount {
+  public loginUser(name: string, email: string, password: string): UserAccount {
     const customers = this.getCustomers();
     const existing = customers.find((c) => c.email.toLowerCase() === email.trim().toLowerCase());
     if (existing) {
-      localStorage.setItem(DB_KEYS.USER, JSON.stringify(existing));
-      this.notify('user');
-      return existing;
+      // Verify password matches
+      if (existing.password === password) {
+        localStorage.setItem(DB_KEYS.USER, JSON.stringify(existing));
+        this.notify('user');
+        return existing;
+      } else {
+        throw new Error('Invalid password');
+      }
     }
 
     const newUser: UserAccount = {
       id: `usr-${Date.now().toString(36)}`,
       name: name.trim() || 'New Collector',
       email: email.trim().toLowerCase(),
+      password: password,
       memberTier: 'Bronze',
       loyaltyPoints: 50,
       totalOrdersCount: 0,
@@ -335,6 +352,30 @@ class FreeDatabaseService {
       localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(list));
       this.notify('customers');
     }
+  }
+
+  public registerUser(name: string, email: string, password: string): UserAccount {
+    const customers = this.getCustomers();
+    const existing = customers.find((c) => c.email.toLowerCase() === email.trim().toLowerCase());
+    if (existing) {
+      throw new Error('Account already exists with this email');
+    }
+
+    const newUser: UserAccount = {
+      id: `usr-${Date.now().toString(36)}`,
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password: password,
+      memberTier: 'Bronze',
+      loyaltyPoints: 50,
+      totalOrdersCount: 0,
+      memberSince: 'Just now',
+      wishlistIds: [],
+    };
+    localStorage.setItem(DB_KEYS.USER, JSON.stringify(newUser));
+    this.addCustomer(newUser);
+    this.notify('user');
+    return newUser;
   }
 
   public updateCustomer(customer: UserAccount): boolean {
