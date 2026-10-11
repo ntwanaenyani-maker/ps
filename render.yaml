@@ -1,0 +1,11 @@
+services:
+  - type: static_site
+    name: phethagatsa-solutions
+    env: static
+    plan: starter
+    region: oregon
+    repo: https://github.com/ntwanaenyani-maker/ps
+    branch: main
+    buildCommand: npm run build
+    publishPath: dist
+    autoDeploy: true
