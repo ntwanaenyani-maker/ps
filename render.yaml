@@ -1,11 +1,35 @@
 services:
-  - type: static_site
-    name: phethagatsa-solutions
-    env: static
-    plan: starter
+  # Express + MongoDB API
+  - type: web
+    name: phethagatsa-api
+    runtime: node
+    plan: free
     region: oregon
-    repo: https://github.com/ntwanaenyani-maker/ps
-    branch: main
-    buildCommand: npm run build
-    publishPath: dist
-    autoDeploy: true
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      # Paste your MongoDB (Atlas or local) connection string when deploying.
+      - key: MONGODB_URI
+        sync: false
+      # Optional: enables hosted card checkout.
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      # Comma-separated allowed origins, or * . Defaults to * if unset.
+      - key: CORS_ORIGIN
+        sync: false
+
+  # Vite React storefront (static)
+  - type: web
+    name: phethagatsa-solutions
+    runtime: static
+    rootDir: .
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: phethagatsa-api
+          property: host

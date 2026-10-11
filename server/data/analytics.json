@@ -1,0 +1,40 @@
+{
+  "totalRevenue": 24560,
+  "totalOrders": 124,
+  "totalCustomers": 89,
+  "totalProducts": 28,
+  "averageOrderValue": 198,
+  "salesGrowthPct": 16,
+  "monthlySales": [
+    {
+      "month": "Jan",
+      "sales": 12400,
+      "orders": 62
+    },
+    {
+      "month": "Feb",
+      "sales": 14800,
+      "orders": 74
+    },
+    {
+      "month": "Mar",
+      "sales": 16200,
+      "orders": 81
+    },
+    {
+      "month": "Apr",
+      "sales": 18900,
+      "orders": 95
+    },
+    {
+      "month": "May",
+      "sales": 21500,
+      "orders": 108
+    },
+    {
+      "month": "Jun",
+      "sales": 24560,
+      "orders": 124
+    }
+  ]
+}

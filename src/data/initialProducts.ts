@@ -1,20 +1,22 @@
 import { Product, Review, Order, UserAccount, StoreSettings, AdminAnalytics } from '../types/store';
 
-// Generated authentic South African Wellness & Cosmetics image assets
-import brandLogoImg from '../assets/images/phethagatsa_solutions_logo_1790843735832.jpg';
-import heroRadiantModelImg from '../assets/images/hero_radiant_model_1790846849702.jpg';
-import faceCreamImg from '../assets/images/product_face_cream_1790846862559.jpg';
-import radiantSerumImg from '../assets/images/product_radiant_serum_1790846873117.jpg';
-import cleanserImg from '../assets/images/product_face_cleanser_1790846885678.jpg';
-import tonerImg from '../assets/images/product_brightening_toner_1790846896810.jpg';
-import motherChildEczemaImg from '../assets/images/mother_child_eczema_1790843745243.jpg';
-import eczemaBalmImg from '../assets/images/eczema_soothing_balm_1790843756444.jpg';
-import chiaSeedsImg from '../assets/images/wellness_chia_seeds_1790763781382.jpg';
-import collagenImg from '../assets/images/wellness_collagen_powder_1790763792825.jpg';
-import thighCreamImg from '../assets/images/wellness_thigh_cream_1790763805596.jpg';
-import pulaComboImg from '../assets/images/wellness_pula_combo_1790763815812.jpg';
-import fofaScrubImg from '../assets/images/wellness_fofa_scrub_1790763824821.jpg';
-import skinGummiesImg from '../assets/images/wellness_skin_gummies_1790763835715.jpg';
+// Generated authentic South African Wellness & Cosmetics image assets.
+// Served as static files from the web root (public/images) so that both the
+// storefront and the API can reference the same stable, un-hashed paths.
+export const brandLogoImg = '/images/phethagatsa_solutions_logo_1790843735832.jpg';
+export const heroRadiantModelImg = '/images/hero_radiant_model_1790846849702.jpg';
+export const faceCreamImg = '/images/product_face_cream_1790846862559.jpg';
+export const radiantSerumImg = '/images/product_radiant_serum_1790846873117.jpg';
+export const cleanserImg = '/images/product_face_cleanser_1790846885678.jpg';
+export const tonerImg = '/images/product_brightening_toner_1790846896810.jpg';
+export const motherChildEczemaImg = '/images/mother_child_eczema_1790843745243.jpg';
+export const eczemaBalmImg = '/images/eczema_soothing_balm_1790843756444.jpg';
+export const chiaSeedsImg = '/images/wellness_chia_seeds_1790763781382.jpg';
+export const collagenImg = '/images/wellness_collagen_powder_1790763792825.jpg';
+export const thighCreamImg = '/images/wellness_thigh_cream_1790763805596.jpg';
+export const pulaComboImg = '/images/wellness_pula_combo_1790763815812.jpg';
+export const fofaScrubImg = '/images/wellness_fofa_scrub_1790763824821.jpg';
+export const skinGummiesImg = '/images/wellness_skin_gummies_1790763835715.jpg';
 
 export const BRAND_LOGO_IMAGE = brandLogoImg;
 export const HERO_RADIANT_MODEL_IMAGE = heroRadiantModelImg;

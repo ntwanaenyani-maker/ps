@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { dbService } from './services/db';
+import { apiService } from './services/api';
 import { Product, CartItem, Currency, Category, Order, UserAccount } from './types/store';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
@@ -19,6 +20,7 @@ import { StorySection } from './components/StorySection';
 import { FAQSection } from './components/FAQSection';
 import { Footer } from './components/Footer';
 import { StarterDownloadModal } from './components/StarterDownloadModal';
+import { AccountModal } from './components/AccountModal';
 import { Download } from 'lucide-react';
 import { addRecentView } from './services/recentViews';
 
@@ -30,6 +32,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<Category>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const [serverOrders, setServerOrders] = useState<Order[]>([]);
 
   // Modals & Drawers state
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
@@ -44,19 +47,51 @@ export default function App() {
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
   const [isStarterModalOpen, setIsStarterModalOpen] = useState(false);
 
-  // Sync data with dbService
+  // Sync data with dbService and restore server session + catalog
   const loadState = useCallback(() => {
     setProducts(dbService.getProducts());
     setCart(dbService.getCart());
-    setWishlistIds(dbService.getWishlist());
-    setCurrentUser(dbService.getCurrentUser());
+    const user = dbService.getCurrentUser();
+    setCurrentUser(user);
+    if (user) setWishlistIds(user.wishlistIds);
   }, []);
 
   useEffect(() => {
     loadState();
-    const unsub = dbService.subscribe('*', loadState);
-    return () => unsub();
-  }, [loadState]);
+
+    // Load catalog from the server (falls back to local seed data on failure)
+    apiService
+      .getProducts()
+      .then((serverProducts) => {
+        if (serverProducts.length > 0) {
+          dbService.seedServerProducts(serverProducts);
+          setProducts(dbService.getProducts());
+        }
+      })
+      .catch(() => {
+        // Offline or API unavailable — keep local seed catalog
+      });
+
+    // Restore signed-in session. Commercial mode: everyone starts signed out.
+    // If the server session is gone but a stale local mirror exists (e.g. from
+    // the old demo account), drop it so the visitor sees the signed-out state.
+    apiService
+      .me()
+      .then((user) => {
+        if (user) {
+          dbService.setCurrentUser(user);
+          setCurrentUser(user);
+          setWishlistIds(user.wishlistIds);
+        } else if (dbService.getCurrentUser()) {
+          dbService.logoutUser();
+          setCurrentUser(null);
+          setWishlistIds([]);
+        }
+      })
+      .catch(() => undefined);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Global escape key handler to close active modals
   useEffect(() => {
@@ -110,19 +145,37 @@ export default function App() {
       setIsAccountOpen(true);
     } else {
       setWishlistIds(dbService.getWishlist());
+      // Persist wishlist for signed-in users
+      if (currentUser) {
+        const merged = dbService.getWishlist();
+        dbService.updateCurrentUser({ wishlistIds: merged });
+        setCurrentUser(dbService.getCurrentUser());
+      }
     }
   };
 
-  const handleLogin = (name: string, email: string, password: string) => {
-    const user = dbService.loginUser(name, email, password);
+  const handleLogin = (user: UserAccount) => {
+    dbService.setCurrentUser(user);
     setCurrentUser(user);
     setWishlistIds(user.wishlistIds);
+    setIsAccountOpen(false);
+    // Refresh their order history from the server
+    apiService
+      .getMyOrders()
+      .then((orders) => setServerOrders(orders))
+      .catch(() => undefined);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiService.logout();
+    } catch {
+      // ignore network errors on logout
+    }
     dbService.logoutUser();
     setCurrentUser(null);
     setWishlistIds([]);
+    setServerOrders([]);
     setIsAccountOpen(false);
   };
 
@@ -134,7 +187,16 @@ export default function App() {
   const handleOrderCompleted = (order: Order) => {
     setIsCheckoutOpen(false);
     setCompletedOrder(order);
-    loadState();
+    dbService.addServerOrder(order);
+    // Optimistically refresh loyalty/order counters
+    setCurrentUser(dbService.getCurrentUser());
+    setServerOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
+    if (currentUser) {
+      apiService
+        .getMyOrders()
+        .then((orders) => setServerOrders(orders))
+        .catch(() => undefined);
+    }
   };
 
   const handleScrollToGrid = () => {
@@ -302,12 +364,29 @@ export default function App() {
         <CustomerAccountPortal
           currentUser={currentUser}
           allProducts={products}
+          orders={serverOrders}
           onClose={() => setIsAccountOpen(false)}
           onAddToCart={(p) => handleAddToCart(p, 1)}
           onSelectProduct={(p) => setQuickViewProduct(p)}
-          onRequireLogin={() => setIsAccountOpen(true)}
+          onLogout={handleLogout}
         />
       )}
+
+      {/* Sign In / Create Account Modal (server-backed auth) */}
+      <AccountModal
+        isOpen={isAccountOpen && !currentUser}
+        currentUser={currentUser}
+        allProducts={products}
+        currency={currency}
+        orders={serverOrders}
+        onClose={() => setIsAccountOpen(false)}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+        onRemoveFromWishlist={handleToggleWishlist}
+        onAddToCart={(p) => handleAddToCart(p, 1)}
+        onViewOrder={(o) => setCompletedOrder(o)}
+        onRequireAccount={() => setIsAccountOpen(true)}
+      />
 
       {/* Starter Download Modal */}
       <StarterDownloadModal
@@ -332,22 +411,26 @@ export default function App() {
         isOpen={isCheckoutOpen}
         cart={cart}
         currency={currency}
-        discount={checkoutDiscount}
+        discountPercent={checkoutDiscount}
+        currentUser={currentUser}
         onClose={() => setIsCheckoutOpen(false)}
-        onOrderComplete={handleOrderCompleted}
+        onOrderCompleted={handleOrderCompleted}
       />
 
       {/* Order Confirmation Modal */}
       {completedOrder && (
         <OrderConfirmationModal
           order={completedOrder}
+          currency={currency}
           onClose={() => setCompletedOrder(null)}
+          onOpenDatabase={() => setIsDatabaseModalOpen(true)}
         />
       )}
 
-      {/* Order Lookup Modal */}
+      {/* Order Lookup Modal (server-backed tracking) */}
       <OrderLookupModal
         isOpen={isOrderLookupOpen}
+        currency={currency}
         onClose={() => setIsOrderLookupOpen(false)}
       />
 

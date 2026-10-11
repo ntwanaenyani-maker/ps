@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { dbService } from '../services/db';
+import React, { useState, useEffect } from 'react';
+import { apiService } from '../services/api';
 import { Order, Currency } from '../types/store';
 import { formatPrice } from '../utils/formatters';
 import { Search, X, Package, Clock, MapPin, CheckCircle } from 'lucide-react';
@@ -18,17 +18,28 @@ export const OrderLookupModal: React.FC<OrderLookupModalProps> = ({
   const [searchId, setSearchId] = useState('');
   const [foundOrder, setFoundOrder] = useState<Order | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      apiService
+        .getMyOrders()
+        .then((orders) => setRecentOrders(orders.slice(0, 8)))
+        .catch(() => setRecentOrders([]));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const allOrders = dbService.getOrders();
-
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchId.trim()) return;
-    const match = dbService.getOrderById(searchId.trim());
-    setFoundOrder(match || null);
+    if (!searchId.trim() || isSearching) return;
+    setIsSearching(true);
+    const match = await apiService.lookupOrder(searchId.trim());
+    setFoundOrder(match);
     setHasSearched(true);
+    setIsSearching(false);
   };
 
   const handleSelectRecent = (order: Order) => {
@@ -76,9 +87,10 @@ export const OrderLookupModal: React.FC<OrderLookupModalProps> = ({
           </div>
           <button
             type="submit"
-            className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-medium uppercase tracking-wider rounded-xs transition-colors cursor-pointer"
+            disabled={isSearching}
+            className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 disabled:opacity-60 text-white text-xs font-medium uppercase tracking-wider rounded-xs transition-colors cursor-pointer"
           >
-            Locate
+            {isSearching ? 'Searching…' : 'Locate'}
           </button>
         </form>
 
@@ -136,13 +148,13 @@ export const OrderLookupModal: React.FC<OrderLookupModalProps> = ({
         ) : null}
 
         {/* Recent database orders */}
-        {allOrders.length > 0 && (
+        {recentOrders.length > 0 && (
           <div className="mt-6 pt-5 border-t border-stone-200">
             <div className="text-[11px] font-mono uppercase tracking-wider text-stone-500 mb-3">
-              Recent Orders in Database ({allOrders.length})
+              Your Recent Orders ({recentOrders.length})
             </div>
             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {allOrders.map((ord) => (
+              {recentOrders.map((ord) => (
                 <button
                   key={ord.id}
                   onClick={() => handleSelectRecent(ord)}

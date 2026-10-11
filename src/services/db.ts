@@ -1,8 +1,6 @@
 import { Product, Order, Review, CartItem, UserAccount, OrderStatus, StoreSettings, AdminAnalytics } from '../types/store';
 import {
   INITIAL_PRODUCTS,
-  SEED_CUSTOMER,
-  SEED_ORDERS,
   INITIAL_SETTINGS,
   INITIAL_ANALYTICS,
 } from '../data/initialProducts';
@@ -19,6 +17,11 @@ const DB_KEYS = {
   ANALYTICS: 'phethagatsa_wellness_v4_analytics',
 } as const;
 
+// Marks storage that has been purged of all demo/mock data. Earlier versions of
+// the store seeded a demo customer, demo orders and a demo wishlist on first
+// boot; this flag makes that a one-time migration for returning visitors.
+const PURGE_FLAG = 'phethagatsa_wellness_v4_demo_purged';
+
 type Listener = () => void;
 
 class FreeDatabaseService {
@@ -32,7 +35,17 @@ class FreeDatabaseService {
     if (typeof window === 'undefined') return;
 
     try {
-      // 1. Products
+      // One-time purge of demo/mock data seeded by older versions of the store.
+      // Commercial mode: every visitor starts signed out with an empty slate.
+      if (!localStorage.getItem(PURGE_FLAG)) {
+        localStorage.removeItem(DB_KEYS.ORDERS);
+        localStorage.removeItem(DB_KEYS.USER);
+        localStorage.removeItem(DB_KEYS.CUSTOMERS);
+        localStorage.removeItem(DB_KEYS.WISHLIST);
+        localStorage.setItem(PURGE_FLAG, 'true');
+      }
+
+      // 1. Products (local cache of the server catalog)
       const existingProducts = localStorage.getItem(DB_KEYS.PRODUCTS);
       if (!existingProducts) {
         localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
@@ -50,96 +63,17 @@ class FreeDatabaseService {
         }
       }
 
-      // 2. Orders
-      const existingOrders = localStorage.getItem(DB_KEYS.ORDERS);
-      if (!existingOrders) {
-        localStorage.setItem(DB_KEYS.ORDERS, JSON.stringify(SEED_ORDERS));
-      }
-
-      // 3. User & Customers
-      const existingUser = localStorage.getItem(DB_KEYS.USER);
-      if (!existingUser) {
-        localStorage.setItem(DB_KEYS.USER, JSON.stringify(SEED_CUSTOMER));
-      }
-
-      const existingCustomers = localStorage.getItem(DB_KEYS.CUSTOMERS);
-      if (!existingCustomers) {
-        const initialCustomers: UserAccount[] = [
-          SEED_CUSTOMER,
-          {
-            id: 'usr-thandiwe-02',
-            name: 'Thandiwe Ngcobo',
-            email: 'thandiwe@example.com',
-            phone: '+27 71 987 6543',
-            address: '45 Beach Road',
-            city: 'Cape Town',
-            province: 'Western Cape',
-            postalCode: '8005',
-            memberTier: 'Gold',
-            loyaltyPoints: 180,
-            totalOrdersCount: 2,
-            memberSince: 'August 2024',
-            wishlistIds: ['radiant-serum', 'pigmentation-corrector-combo'],
-          },
-          {
-            id: 'usr-lerato-03',
-            name: 'Lerato Mokoena',
-            email: 'lerato@example.com',
-            phone: '+27 83 456 7890',
-            address: '78 Umhlanga Rocks Drive',
-            city: 'Durban',
-            province: 'KwaZulu-Natal',
-            postalCode: '4320',
-            memberTier: 'VIP Radiant',
-            loyaltyPoints: 420,
-            totalOrdersCount: 5,
-            memberSince: 'January 2024',
-            wishlistIds: ['collagen-peptides', 'radiant-skin-gummies'],
-          },
-          {
-            id: 'usr-sipho-04',
-            name: 'Sipho Dlamini',
-            email: 'sipho@example.com',
-            phone: '+27 72 381 9402',
-            address: '12 Jan Smuts Avenue',
-            city: 'Johannesburg',
-            province: 'Gauteng',
-            postalCode: '2193',
-            memberTier: 'Silver',
-            loyaltyPoints: 90,
-            totalOrdersCount: 1,
-            memberSince: 'June 2025',
-            wishlistIds: ['soothing-eczema-barrier-balm'],
-          },
-          {
-            id: 'usr-admin-001',
-            name: 'Admin Manager',
-            email: 'admin@admin.com',
-            password: 'dota',
-            memberTier: 'Admin',
-            loyaltyPoints: 999,
-            totalOrdersCount: 0,
-            memberSince: '2026-10-01',
-            wishlistIds: [],
-          },
-        ];
-        localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(initialCustomers));
-      }
-
-      // 4. Cart & Wishlist
+      // 2. Cart (no wishlist seeding — wishlists belong to signed-in accounts)
       if (!localStorage.getItem(DB_KEYS.CART)) {
         localStorage.setItem(DB_KEYS.CART, JSON.stringify([]));
       }
-      if (!localStorage.getItem(DB_KEYS.WISHLIST)) {
-        localStorage.setItem(DB_KEYS.WISHLIST, JSON.stringify(['radiant-serum', 'revive-face-cleanser']));
-      }
 
-      // 5. Store Settings
+      // 3. Store Settings
       if (!localStorage.getItem(DB_KEYS.SETTINGS)) {
         localStorage.setItem(DB_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
       }
 
-      // 6. Analytics
+      // 4. Analytics
       if (!localStorage.getItem(DB_KEYS.ANALYTICS)) {
         localStorage.setItem(DB_KEYS.ANALYTICS, JSON.stringify(INITIAL_ANALYTICS));
       }
@@ -157,6 +91,29 @@ class FreeDatabaseService {
     return () => {
       this.listeners.get(collection)?.delete(listener);
     };
+  }
+
+  // --- SERVER DATA BRIDGE ---
+  public seedServerProducts(serverProducts: Product[]): void {
+    if (typeof window === 'undefined' || !Array.isArray(serverProducts) || serverProducts.length === 0) return;
+    localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(serverProducts));
+    this.notify('products');
+  }
+
+  public setCurrentUser(user: UserAccount): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(DB_KEYS.USER, JSON.stringify(user));
+    this.notify('user');
+  }
+
+  public addServerOrder(order: Order): void {
+    if (typeof window === 'undefined') return;
+    const orders = this.getOrders();
+    if (!orders.some((o) => o.id === order.id)) {
+      orders.unshift(order);
+      localStorage.setItem(DB_KEYS.ORDERS, JSON.stringify(orders));
+      this.notify('orders');
+    }
   }
 
   private notify(collection: string): void {
@@ -282,53 +239,25 @@ class FreeDatabaseService {
   }
 
   // --- USER ACCOUNT & CUSTOMERS ---
+  // Commercial mode: visitors start signed out. This only returns a user when
+  // one actually signed in (or registered) on this device.
   public getCurrentUser(): UserAccount | null {
     try {
       const data = localStorage.getItem(DB_KEYS.USER);
-      return data ? JSON.parse(data) : SEED_CUSTOMER;
+      return data ? JSON.parse(data) : null;
     } catch {
-      return SEED_CUSTOMER;
+      return null;
     }
   }
 
-  public updateCurrentUser(updates: Partial<UserAccount>): UserAccount {
-    const current = this.getCurrentUser() || SEED_CUSTOMER;
+  public updateCurrentUser(updates: Partial<UserAccount>): UserAccount | null {
+    const current = this.getCurrentUser();
+    if (!current) return current ?? ({} as UserAccount);
     const updated: UserAccount = { ...current, ...updates };
     localStorage.setItem(DB_KEYS.USER, JSON.stringify(updated));
     this.updateCustomer(updated);
     this.notify('user');
     return updated;
-  }
-
-  public loginUser(name: string, email: string, password: string): UserAccount {
-    const customers = this.getCustomers();
-    const existing = customers.find((c) => c.email.toLowerCase() === email.trim().toLowerCase());
-    if (existing) {
-      // Verify password matches
-      if (existing.password === password) {
-        localStorage.setItem(DB_KEYS.USER, JSON.stringify(existing));
-        this.notify('user');
-        return existing;
-      } else {
-        throw new Error('Invalid password');
-      }
-    }
-
-    const newUser: UserAccount = {
-      id: `usr-${Date.now().toString(36)}`,
-      name: name.trim() || 'New Collector',
-      email: email.trim().toLowerCase(),
-      password: password,
-      memberTier: 'Bronze',
-      loyaltyPoints: 50,
-      totalOrdersCount: 0,
-      memberSince: 'Just now',
-      wishlistIds: [],
-    };
-    localStorage.setItem(DB_KEYS.USER, JSON.stringify(newUser));
-    this.addCustomer(newUser);
-    this.notify('user');
-    return newUser;
   }
 
   public logoutUser(): void {
@@ -339,9 +268,9 @@ class FreeDatabaseService {
   public getCustomers(): UserAccount[] {
     try {
       const data = localStorage.getItem(DB_KEYS.CUSTOMERS);
-      return data ? JSON.parse(data) : [SEED_CUSTOMER];
+      return data ? JSON.parse(data) : [];
     } catch {
-      return [SEED_CUSTOMER];
+      return [];
     }
   }
 
@@ -420,12 +349,14 @@ class FreeDatabaseService {
   }
 
   // --- ORDERS ---
+  // Only orders actually placed on this device (server orders get mirrored here
+  // via addServerOrder). No demo orders are seeded.
   public getOrders(): Order[] {
     try {
       const data = localStorage.getItem(DB_KEYS.ORDERS);
-      return data ? JSON.parse(data) : SEED_ORDERS;
+      return data ? JSON.parse(data) : [];
     } catch {
-      return SEED_ORDERS;
+      return [];
     }
   }
 
@@ -731,11 +662,12 @@ class FreeDatabaseService {
   // --- RESET DB ---
   public resetToDefaults(): void {
     localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
-    localStorage.setItem(DB_KEYS.ORDERS, JSON.stringify(SEED_ORDERS));
-    localStorage.setItem(DB_KEYS.USER, JSON.stringify(SEED_CUSTOMER));
     localStorage.setItem(DB_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
     localStorage.setItem(DB_KEYS.CART, JSON.stringify([]));
-    localStorage.setItem(DB_KEYS.WISHLIST, JSON.stringify(['radiant-serum', 'revive-face-cleanser']));
+    localStorage.removeItem(DB_KEYS.ORDERS);
+    localStorage.removeItem(DB_KEYS.USER);
+    localStorage.removeItem(DB_KEYS.CUSTOMERS);
+    localStorage.removeItem(DB_KEYS.WISHLIST);
     this.notify('*');
   }
 }

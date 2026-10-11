@@ -1,0 +1,11 @@
+{
+  "storeName": "Phethagatsa Solutions",
+  "storeEmail": "care@phethagatsa.co.za",
+  "storePhone": "+27 (0)11 832 9400",
+  "storeAddress": "123 Main Street, Pretoria / Johannesburg, Gauteng, 0001",
+  "whatsappNumber": "27723819402",
+  "currency": "ZAR",
+  "paymentGateway": "PayFast / Instant EFT (Ozow, Capitec)",
+  "defaultShipping": 75,
+  "freeShippingThreshold": 450
+}

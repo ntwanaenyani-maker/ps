@@ -24,6 +24,7 @@ import {
 interface CustomerAccountPortalProps {
   currentUser: UserAccount;
   allProducts: Product[];
+  orders?: Order[];
   onClose: () => void;
   onAddToCart: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
@@ -33,6 +34,7 @@ interface CustomerAccountPortalProps {
 export const CustomerAccountPortal: React.FC<CustomerAccountPortalProps> = ({
   currentUser,
   allProducts,
+  orders: serverOrders,
   onClose,
   onAddToCart,
   onSelectProduct,
@@ -55,10 +57,12 @@ export const CustomerAccountPortal: React.FC<CustomerAccountPortalProps> = ({
     newPassword: '',
   });
 
-  const orders = dbService.getOrders();
-  const customerOrders = orders.filter(
-    (o) => o.customer.email.toLowerCase() === currentUser.email.toLowerCase() || o.customer.fullName.toLowerCase() === currentUser.name.toLowerCase()
-  );
+  const localOrders = dbService.getOrders();
+  const orders = serverOrders && serverOrders.length > 0
+    ? serverOrders
+    : localOrders.filter(
+        (o) => o.customer.email.toLowerCase() === currentUser.email.toLowerCase() || o.customer.fullName.toLowerCase() === currentUser.name.toLowerCase()
+      );
 
   const wishlistProducts = allProducts.filter((p) => currentUser.wishlistIds.includes(p.id));
 
@@ -73,8 +77,10 @@ export const CustomerAccountPortal: React.FC<CustomerAccountPortalProps> = ({
       province: formData.province,
       postalCode: formData.postalCode,
     });
-    setUserProfile(updated);
-    alert('Account details successfully updated!');
+    if (updated) {
+      setUserProfile(updated);
+      alert('Account details successfully updated!');
+    }
   };
 
   const handleOpenOrderDetail = (order: Order) => {
@@ -133,7 +139,7 @@ export const CustomerAccountPortal: React.FC<CustomerAccountPortalProps> = ({
                   <span>My Orders</span>
                 </div>
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-200 text-stone-700 font-mono">
-                  {customerOrders.length}
+                  {orders.length}
                 </span>
               </button>
 
@@ -216,7 +222,7 @@ export const CustomerAccountPortal: React.FC<CustomerAccountPortalProps> = ({
                 <div className="p-5 bg-white border border-stone-200 rounded-xs shadow-2xs">
                   <div className="text-xs font-mono text-stone-500 uppercase">Total Orders</div>
                   <div className="text-3xl font-bold font-mono text-stone-950 mt-2">
-                    {customerOrders.length}
+                    {orders.length}
                   </div>
                   <div className="text-[11px] text-emerald-800 font-mono mt-1">Nationwide deliveries</div>
                 </div>
@@ -250,9 +256,9 @@ export const CustomerAccountPortal: React.FC<CustomerAccountPortalProps> = ({
                   </button>
                 </div>
 
-                {customerOrders.length > 0 ? (
+                {orders.length > 0 ? (
                   <div className="divide-y divide-stone-100">
-                    {customerOrders.slice(0, 3).map((o) => (
+                    {orders.slice(0, 3).map((o) => (
                       <div
                         key={o.id}
                         onClick={() => handleOpenOrderDetail(o)}
@@ -318,7 +324,7 @@ export const CustomerAccountPortal: React.FC<CustomerAccountPortalProps> = ({
               </div>
 
               <div className="space-y-4">
-                {customerOrders.map((o) => (
+                {orders.map((o) => (
                   <div
                     key={o.id}
                     onClick={() => handleOpenOrderDetail(o)}

@@ -1,0 +1,21 @@
+{
+  "name": "phethagatsa-api",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MongoDB-backed API server for the Phethagatsa Solutions storefront",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "seed": "node src/seed.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "mongoose": "^8.9.0"
+  }
+}
