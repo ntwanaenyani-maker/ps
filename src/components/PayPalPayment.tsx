@@ -118,12 +118,6 @@ export const PayPalPayment: React.FC<PayPalPaymentProps> = ({
       <p className="text-[11px] text-stone-600 mb-3 leading-relaxed">
         Pay securely by card or PayPal balance. Your order is confirmed automatically the moment
         payment clears.
-        {PAYPAL_CURRENCY !== 'ZAR' && (
-          <>
-            {' '}
-            Amounts are charged in {PAYPAL_CURRENCY} at the equivalent value.
-          </>
-        )}
       </p>
       {loading && (
         <div className="flex items-center gap-2 text-xs text-stone-500">
