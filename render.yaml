@@ -16,6 +16,9 @@ services:
       # Optional: enables hosted card checkout.
       - key: PAYSTACK_SECRET_KEY
         sync: false
+      # Google OAuth web client ID (verifies ID tokens at /api/auth/google).
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       # Comma-separated allowed origins, or * . Defaults to * if unset.
       - key: CORS_ORIGIN
         sync: false
@@ -33,3 +36,6 @@ services:
           type: web
           name: phethagatsa-api
           property: host
+      # Google OAuth web client ID (public; rendered by the sign-in modal).
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false

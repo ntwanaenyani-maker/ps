@@ -4,6 +4,9 @@ import { formatPrice } from '../utils/formatters';
 import { apiService } from '../services/api';
 import { X, User, Heart, Package, ShoppingBag, Trash2, LogOut, Loader2, ShieldCheck, UserCheck, ArrowRight } from 'lucide-react';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
+import { GoogleSignInButton } from './GoogleSignInButton';
+
+const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) ?? '';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -90,6 +93,19 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       onLogin(user);
     } catch (error: any) {
       setAuthError(error.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleCredential = async (credential: string) => {
+    setAuthError('');
+    setIsSubmitting(true);
+    try {
+      const user = await apiService.googleLogin(credential);
+      onLogin(user);
+    } catch (error: any) {
+      setAuthError(error.message || 'Google sign-in failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -345,6 +361,22 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             <div className="flex-1 overflow-y-auto">
               {authError && (
                 <div className="mx-8 mt-6 p-3 bg-rose-50 border border-rose-200 rounded-xs text-rose-700 text-xs">{authError}</div>
+              )}
+
+              {GOOGLE_CLIENT_ID && (
+                <div className="mx-8 mt-6">
+                  <GoogleSignInButton
+                    clientId={GOOGLE_CLIENT_ID}
+                    text={authMode === 'register' ? 'signup_with' : 'signin_with'}
+                    onCredential={handleGoogleCredential}
+                    onError={setAuthError}
+                  />
+                  <div className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-wider text-stone-400 my-4">
+                    <span className="h-px flex-1 bg-stone-200" />
+                    <span>or continue with email</span>
+                    <span className="h-px flex-1 bg-stone-200" />
+                  </div>
+                </div>
               )}
 
               {/* Login Form */}

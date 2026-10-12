@@ -18,6 +18,9 @@ const UserSchema = new Schema(
     totalOrdersCount: { type: Number, default: 0 },
     memberSince: { type: String, default: 'Just now' },
     role: { type: String, default: 'customer' },
+    authProvider: { type: String, default: 'local' },
+    googleId: { type: String, default: null },
+    picture: { type: String, default: null },
     wishlist: { type: [String], default: [] },
   },
   { collection: 'users', timestamps: { createdAt: true, updatedAt: false } }

@@ -120,6 +120,15 @@ export const apiService = {
     return mapApiUserToAccount(data.user);
   },
 
+  async googleLogin(credential: string): Promise<UserAccount> {
+    const data = await request<{ user: ApiUser; token: string }>('/api/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    });
+    setToken(data.token);
+    return mapApiUserToAccount(data.user);
+  },
+
   async logout(): Promise<void> {
     try {
       await request('/api/auth/logout', { method: 'POST' });

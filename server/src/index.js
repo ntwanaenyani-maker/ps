@@ -174,6 +174,66 @@ authRouter.post(
   })
 );
 
+// Google Identity Services: the browser sends the ID token ("credential")
+// issued for our web client; we verify it and mint a normal server session.
+authRouter.post(
+  '/google',
+  wrap(async (req, res) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) return res.status(503).json({ error: 'Google sign-in is not configured' });
+
+    const credential = String(req.body?.credential || '');
+    if (!credential) return res.status(400).json({ error: 'Missing Google credential' });
+
+    let profile;
+    try {
+      const verify = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
+      );
+      if (!verify.ok) return res.status(401).json({ error: 'Invalid Google credential' });
+      profile = await verify.json();
+    } catch {
+      return res.status(502).json({ error: 'Could not verify Google credential' });
+    }
+
+    if (profile.aud !== clientId) return res.status(401).json({ error: 'Google credential audience mismatch' });
+    if (!['accounts.google.com', 'https://accounts.google.com'].includes(profile.iss)) {
+      return res.status(401).json({ error: 'Unexpected Google credential issuer' });
+    }
+    if (String(profile.email_verified) !== 'true') {
+      return res.status(401).json({ error: 'Google email is not verified' });
+    }
+
+    const email = String(profile.email || '').trim().toLowerCase();
+    if (!email) return res.status(401).json({ error: 'Google account has no email' });
+
+    let user = await users.findByEmail(email);
+    if (!user) {
+      user = await users.create({
+        id: `usr-${crypto.randomUUID()}`,
+        email,
+        name: profile.name || email.split('@')[0],
+        passwordHash: `google-oauth:${generateToken()}`,
+        phone: null,
+        authProvider: 'google',
+        googleId: profile.sub || null,
+        picture: profile.picture || null,
+      });
+    } else if (!user.googleId) {
+      user = await users.update(user.id, {
+        googleId: profile.sub || null,
+        picture: profile.picture || user.picture || null,
+      });
+    }
+
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await sessions.create({ token, userId: user.id, expiresAt });
+    setSessionCookie(res, token, expiresAt);
+    res.json({ user: toPublicUser(user), token });
+  })
+);
+
 app.use('/api/auth', authRouter);
 
 // ---- products -----------------------------------------------------------------
