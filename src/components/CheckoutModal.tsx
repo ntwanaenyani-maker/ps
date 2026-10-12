@@ -8,6 +8,7 @@ import { getOrderWhatsAppUrl, getOfflineEftWhatsAppUrl } from '../lib/whatsapp';
 import { generateOrderRef } from '../lib/orderRef';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 import { PayPalPayment } from './PayPalPayment';
+import { StitchPayment } from './StitchPayment';
 import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Loader2 } from 'lucide-react';
 
 interface CheckoutModalProps {
@@ -40,11 +41,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     country: 'South Africa',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<'paypal' | 'instant-eft' | 'payfast' | 'cod' | 'wire'>('wire'); // Offline EFT default
+  const [paymentMethod, setPaymentMethod] = useState<
+    'paypal' | 'stitch' | 'instant-eft' | 'payfast' | 'cod' | 'wire'
+  >('wire'); // Offline EFT default
   const [autoSendWhatsAppEft, setAutoSendWhatsAppEft] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [paypalOrder, setPaypalOrder] = useState<Order | null>(null);
+  const [stitchOrder, setStitchOrder] = useState<Order | null>(null);
 
   const provisionalRef = React.useMemo(() => generateOrderRef(), []);
 
@@ -91,6 +95,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       // server marks the order paid once the payment is captured.
       if (paymentMethod === 'paypal') {
         setPaypalOrder(order);
+        return;
+      }
+
+      // Pay by Bank (Stitch): create the order, then hand off to the Stitch
+      // redirect. The server marks the order paid once payment is confirmed.
+      if (paymentMethod === 'stitch') {
+        setStitchOrder(order);
         return;
       }
 
@@ -258,7 +269,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </h3>
 
                 {/* Method Tabs */}
-                <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('wire')}
@@ -285,6 +296,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <CreditCard className="w-4 h-4 mb-1.5" />
                     <span className="text-xs font-semibold">Card & PayPal</span>
                     <span className="text-[10px] font-mono opacity-80">Secure online payment</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('stitch')}
+                    className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
+                      paymentMethod === 'stitch'
+                        ? 'border-emerald-800 bg-emerald-950 text-white shadow-xs'
+                        : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                    }`}
+                  >
+                    <Landmark className="w-4 h-4 mb-1.5 text-emerald-400" />
+                    <span className="text-xs font-semibold">Pay by Bank</span>
+                    <span className="text-[10px] font-mono opacity-90 text-emerald-200">Capitec · Absa · PayShap</span>
                   </button>
 
                   <button
@@ -339,6 +364,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       <p className="text-stone-600 text-[11px] leading-relaxed">
                         Continue to secure PayPal checkout to pay by card or with your PayPal
                         balance. Your order is confirmed automatically once payment clears.
+                      </p>
+                    </div>
+                  )
+                )}
+
+                {paymentMethod === 'stitch' && (
+                  stitchOrder ? (
+                    <StitchPayment
+                      amount={total}
+                      currency={currency}
+                      orderNumber={stitchOrder.id}
+                      payerName={customer.fullName}
+                      payerEmail={customer.email}
+                      payerPhone={customer.phone}
+                      onError={setSubmitError}
+                    />
+                  ) : (
+                    <div className="p-4 bg-stone-50 border border-stone-200 rounded-xs text-xs space-y-1.5">
+                      <p className="font-semibold text-stone-900">Pay by Bank (Stitch)</p>
+                      <p className="text-stone-600 text-[11px] leading-relaxed">
+                        Continue to pay directly from your South African bank account. You'll approve
+                        the payment in your bank, then return here automatically.
                       </p>
                     </div>
                   )
@@ -414,7 +461,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 {submitError && (
                   <div className="p-3 bg-rose-50 border border-rose-200 rounded-xs text-rose-700 text-xs">{submitError}</div>
                 )}
-                {!(paymentMethod === 'paypal' && paypalOrder) && (
+                {!((paymentMethod === 'paypal' && paypalOrder) || (paymentMethod === 'stitch' && stitchOrder)) && (
                   <button
                     type="submit"
                     disabled={isSubmitting}
@@ -431,7 +478,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         <span>
                           {paymentMethod === 'paypal'
                             ? `Continue to PayPal · ${formatPrice(total, currency)}`
-                            : `Authorize Order · ${formatPrice(total, currency)}`}
+                            : paymentMethod === 'stitch'
+                              ? `Continue to Pay by Bank · ${formatPrice(total, currency)}`
+                              : `Authorize Order · ${formatPrice(total, currency)}`}
                         </span>
                       </>
                     )}

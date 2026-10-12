@@ -90,6 +90,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Handle the return redirect from Stitch Pay by Bank. Stitch appends the
+  // payment request id, status and externalReference to our redirect_uri.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const stitchId = params.get('id');
+    const externalReference = params.get('externalReference');
+    const isStitchReturn = params.get('stitch') === 'return' || (Boolean(stitchId) && Boolean(externalReference));
+    if (!isStitchReturn) return;
+
+    // Strip the Stitch query params so a refresh doesn't re-run this.
+    window.history.replaceState({}, '', window.location.pathname);
+
+    if (!stitchId) return;
+    apiService
+      .confirmStitchPayment({ paymentRequestId: stitchId, orderNumber: externalReference || undefined })
+      .then(() => {
+        if (!externalReference) return;
+        return apiService.lookupOrder(externalReference).then((order) => {
+          if (order) {
+            dbService.addServerOrder(order);
+            setCompletedOrder(order);
+          }
+        });
+      })
+      .catch(() => undefined);
+  }, []);
+
   // Global escape key handler to close active modals
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

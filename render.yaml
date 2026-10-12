@@ -23,6 +23,16 @@ services:
         sync: false
       - key: PAYPAL_ENV
         value: sandbox
+      # Stitch (Pay by Bank) credentials (client token, client_paymentrequest scope).
+      - key: STITCH_CLIENT_ID
+        sync: false
+      - key: STITCH_CLIENT_SECRET
+        sync: false
+      - key: STITCH_ENV
+        value: test
+      # Allowlisted Stitch redirect target (defaults to CORS_ORIGIN + /?stitch=return).
+      - key: STITCH_REDIRECT_URI
+        sync: false
       # Google OAuth web client ID (verifies ID tokens at /api/auth/google).
       - key: GOOGLE_CLIENT_ID
         sync: false

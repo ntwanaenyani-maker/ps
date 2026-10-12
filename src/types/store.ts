@@ -120,7 +120,7 @@ export interface Order {
   tax: number;
   total: number;
   currency: string;
-  paymentMethod: 'card' | 'instant-eft' | 'payfast' | 'cod' | 'wire' | 'paypal';
+  paymentMethod: 'card' | 'instant-eft' | 'payfast' | 'cod' | 'wire' | 'paypal' | 'stitch';
   status: OrderStatus;
   createdAt: string;
   estimatedDelivery: string;

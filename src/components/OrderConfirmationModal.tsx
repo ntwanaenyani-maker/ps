@@ -145,7 +145,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                 <span>Financial Settlement</span>
               </div>
               <p className="text-stone-600 text-[11px] leading-relaxed">
-                Payment Type: <span className="uppercase font-mono font-medium text-stone-900">{order.paymentMethod === 'wire' || order.paymentMethod === 'instant-eft' ? 'EFT Bank Transfer' : order.paymentMethod === 'paypal' ? 'Card / PayPal' : order.paymentMethod.toUpperCase()}</span><br />
+                Payment Type: <span className="uppercase font-mono font-medium text-stone-900">{order.paymentMethod === 'wire' || order.paymentMethod === 'instant-eft' ? 'EFT Bank Transfer' : order.paymentMethod === 'paypal' ? 'Card / PayPal' : order.paymentMethod === 'stitch' ? 'Pay by Bank (Stitch)' : order.paymentMethod.toUpperCase()}</span><br />
                 Amount: <span className="font-mono font-semibold text-stone-950">{formatPrice(order.total, currency)}</span><br />
                 Courier Insurance: Covered<br />
                 Date: {order.createdAt}

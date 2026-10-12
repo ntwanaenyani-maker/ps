@@ -20,9 +20,11 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const SESSION_COOKIE = 'ps_session';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'phethagatsa-admin-2026-secure-key';
-const VALID_PAYMENT = new Set(['card', 'instant-eft', 'payfast', 'cod', 'wire', 'paystack', 'paypal']);
+const VALID_PAYMENT = new Set(['card', 'instant-eft', 'payfast', 'cod', 'wire', 'paystack', 'paypal', 'stitch']);
 const PAYPAL_BASE =
   process.env.PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+const STITCH_TOKEN_URL = 'https://secure.stitch.money/connect/token';
+const STITCH_GRAPHQL_URL = 'https://api.stitch.money/graphql';
 
 app.use(express.json());
 
@@ -111,6 +113,96 @@ async function paypalAccessToken() {
   }
   return data.access_token;
 }
+
+// ---- Stitch (Pay by Bank / client token) --------------------------------------
+function stitchConfigured() {
+  return Boolean(process.env.STITCH_CLIENT_ID && process.env.STITCH_CLIENT_SECRET);
+}
+
+let stitchTokenCache = { token: null, expiresAt: 0 };
+
+async function stitchClientToken() {
+  const now = Date.now();
+  if (stitchTokenCache.token && stitchTokenCache.expiresAt > now) return stitchTokenCache.token;
+  const body = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: process.env.STITCH_CLIENT_ID,
+    client_secret: process.env.STITCH_CLIENT_SECRET,
+    scope: 'client_paymentrequest',
+    audience: STITCH_TOKEN_URL,
+  });
+  const res = await fetchWithTimeout(STITCH_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) {
+    throw new Error(data.error_description || data.error || 'Stitch authentication failed');
+  }
+  const ttl = (Number(data.expires_in) || 3600) * 1000;
+  stitchTokenCache = { token: data.access_token, expiresAt: now + ttl - 60000 };
+  return data.access_token;
+}
+
+async function stitchGraphql(query, variables, token) {
+  const res = await fetchWithTimeout(STITCH_GRAPHQL_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.errors?.[0]?.message || `Stitch request failed (${res.status})`);
+  }
+  if (Array.isArray(data.errors) && data.errors.length) {
+    throw new Error(data.errors.map((e) => e.message).join('; '));
+  }
+  return data.data;
+}
+
+const STITCH_CREATE_MUTATION = `
+mutation CreatePaymentRequest(
+  $amount: MoneyInput!,
+  $payerReference: String!,
+  $beneficiaryReference: String!,
+  $externalReference: String,
+  $expireAt: Date,
+  $payerInformation: PayerInformationInput,
+  $metadata: Json
+) {
+  clientPaymentInitiationRequestCreate(input: {
+    amount: $amount,
+    payerReference: $payerReference,
+    beneficiaryReference: $beneficiaryReference,
+    externalReference: $externalReference,
+    expireAt: $expireAt,
+    payerInformation: $payerInformation,
+    metadata: $metadata,
+    paymentMethods: { eft: { enabled: true }, card: { enabled: false } }
+  }) {
+    paymentInitiationRequest { id url }
+  }
+}`;
+
+const STITCH_STATUS_QUERY = `
+query GetPaymentRequestStatus($id: ID!) {
+  node(id: $id) {
+    ... on PaymentInitiationRequest {
+      id
+      url
+      state { __typename }
+    }
+  }
+}`;
+
+const STITCH_SIMULATE_MUTATION = `
+mutation Simulate($paymentRequestId: ID!) {
+  testClientPaymentInitiationRequestSimulateComplete(input: {
+    paymentRequestId: $paymentRequestId,
+    paymentMethod: eft
+  }) { paymentRequestId }
+}`;
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -549,6 +641,119 @@ app.post(
       });
     }
     res.json({ status: data.status, id: data.id || orderId, captured: completed });
+  })
+);
+
+// ---- payments (Stitch Pay by Bank) --------------------------------------------
+app.get(
+  '/api/pay/stitch/status',
+  wrap(async (_req, res) => {
+    const env = process.env.STITCH_ENV || 'test';
+    if (!stitchConfigured()) return res.json({ stitchConfigured: false, env });
+    // Verify the credentials actually authenticate; otherwise hide Pay by Bank.
+    try {
+      await stitchClientToken();
+      res.json({ stitchConfigured: true, env });
+    } catch (err) {
+      res.json({ stitchConfigured: false, env, error: err.message || 'Stitch authentication failed' });
+    }
+  })
+);
+
+app.post(
+  '/api/pay/stitch/create',
+  wrap(async (req, res) => {
+    if (!stitchConfigured()) {
+      return res.status(503).json({ error: 'Pay by Bank is not configured yet.' });
+    }
+    const { amount, currency = 'ZAR', orderNumber, payerName, payerEmail, payerPhone, returnUrl } =
+      req.body || {};
+    if (!(Number(amount) > 0)) {
+      return res.status(400).json({ error: 'A positive amount is required' });
+    }
+    const ref = String(orderNumber || '').toUpperCase().slice(0, 20);
+    const externalReference = ref || `PS-${Date.now()}`;
+    const payerReference = (ref || 'Phethagatsa').slice(0, 12);
+    const beneficiaryReference = (ref || 'Phethagatsa').slice(0, 20);
+
+    const token = await stitchClientToken();
+    const expireAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const payerInformation = { payerId: externalReference };
+    if (payerName) payerInformation.fullName = String(payerName);
+    if (payerEmail) payerInformation.email = String(payerEmail);
+    if (payerPhone) payerInformation.mobileNumber = String(payerPhone).replace(/[^0-9]/g, '');
+
+    const data = await stitchGraphql(
+      STITCH_CREATE_MUTATION,
+      {
+        amount: { quantity: Number(amount), currency: String(currency).toUpperCase() },
+        payerReference,
+        beneficiaryReference,
+        externalReference,
+        expireAt,
+        payerInformation,
+        metadata: { orderNumber: ref || null },
+      },
+      token
+    );
+    const pir = data?.clientPaymentInitiationRequestCreate?.paymentInitiationRequest;
+    if (!pir?.url) {
+      return res.status(502).json({ error: 'Could not start Pay by Bank checkout' });
+    }
+    if (ref) await orders.update(ref, { stitchRequestId: pir.id });
+
+    const fallbackOrigin = allowed.find((a) => a !== '*') || req.headers.origin || '';
+    const redirectUri =
+      returnUrl || process.env.STITCH_REDIRECT_URI || (fallbackOrigin ? `${fallbackOrigin}/?stitch=return` : '');
+    const redirectUrl = redirectUri
+      ? `${pir.url}?redirect_uri=${encodeURIComponent(redirectUri)}`
+      : pir.url;
+
+    res.json({ id: pir.id, url: pir.url, redirectUrl, externalReference });
+  })
+);
+
+app.post(
+  '/api/pay/stitch/confirm',
+  wrap(async (req, res) => {
+    if (!stitchConfigured()) {
+      return res.status(503).json({ error: 'Pay by Bank is not configured yet.' });
+    }
+    const { paymentRequestId, orderNumber } = req.body || {};
+    if (!paymentRequestId) return res.status(400).json({ error: 'Missing payment request id' });
+    const token = await stitchClientToken();
+    const data = await stitchGraphql(STITCH_STATUS_QUERY, { id: paymentRequestId }, token);
+    const state = data?.node?.state?.__typename || 'Unknown';
+    const completed = state === 'PaymentInitiationRequestCompleted';
+    if (completed && orderNumber) {
+      await orders.update(String(orderNumber).toUpperCase(), {
+        paymentStatus: 'paid',
+        status: 'confirmed',
+        stitchRequestId: paymentRequestId,
+        paidAt: new Date(),
+      });
+    }
+    res.json({ state, completed, orderNumber: orderNumber || null });
+  })
+);
+
+app.post(
+  '/api/pay/stitch/simulate',
+  wrap(async (req, res) => {
+    if (!stitchConfigured()) {
+      return res.status(503).json({ error: 'Pay by Bank is not configured yet.' });
+    }
+    if (process.env.STITCH_ENV === 'live') {
+      return res.status(403).json({ error: 'Simulation is only available in test mode' });
+    }
+    const { paymentRequestId } = req.body || {};
+    if (!paymentRequestId) return res.status(400).json({ error: 'Missing payment request id' });
+    const token = await stitchClientToken();
+    const data = await stitchGraphql(STITCH_SIMULATE_MUTATION, { paymentRequestId }, token);
+    res.json({
+      simulated: true,
+      result: data?.testClientPaymentInitiationRequestSimulateComplete || null,
+    });
   })
 );
 

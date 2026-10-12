@@ -203,6 +203,45 @@ export const apiService = {
     });
   },
 
+  // ---- PAYMENTS (Stitch Pay by Bank) ----
+  async stitchStatus(): Promise<{ stitchConfigured: boolean; env: string }> {
+    return request('/api/pay/stitch/status');
+  },
+
+  async createStitchPayment(params: {
+    amount: number;
+    currency?: string;
+    orderNumber?: string;
+    payerName?: string;
+    payerEmail?: string;
+    payerPhone?: string;
+    returnUrl?: string;
+  }): Promise<{ id: string; url: string; redirectUrl: string; externalReference: string }> {
+    return request('/api/pay/stitch/create', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async confirmStitchPayment(params: {
+    paymentRequestId: string;
+    orderNumber?: string;
+  }): Promise<{ state: string; completed: boolean; orderNumber: string | null }> {
+    return request('/api/pay/stitch/confirm', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async simulateStitchPayment(params: {
+    paymentRequestId: string;
+  }): Promise<{ simulated: boolean }> {
+    return request('/api/pay/stitch/simulate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
   // ---- PAYMENTS (Paystack-ready) ----
   async initializePayment(params: {
     email: string;
