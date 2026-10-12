@@ -1118,8 +1118,10 @@ app.put(
 );
 
 function publicBaseUrl(req) {
-  const origin = allowed.find((a) => a !== '*');
-  if (origin) return origin.replace(/\/+$/, '');
+  // Prefer an explicit public API URL; otherwise use the host this request
+  // arrived on (the admin panel calls the API directly, so this is the API).
+  const configured = (process.env.PUBLIC_API_URL || '').trim();
+  if (configured) return configured.replace(/\/+$/, '');
   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
   return `${proto}://${req.headers.host}`;
 }
