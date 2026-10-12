@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { dbService } from './services/db';
-import { apiService } from './services/api';
+import { apiService, PaymentMethodsResponse } from './services/api';
 import { Product, CartItem, Currency, Category, Order, UserAccount } from './types/store';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
@@ -20,6 +20,7 @@ import { FAQSection } from './components/FAQSection';
 import { Footer } from './components/Footer';
 import { AccountModal } from './components/AccountModal';
 import { PolicyModal, PolicyKind } from './components/PolicyModal';
+import { AdminPanel } from './components/AdminPanel';
 import { addRecentView } from './services/recentViews';
 
 export default function App() {
@@ -43,6 +44,15 @@ export default function App() {
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [isOrderLookupOpen, setIsOrderLookupOpen] = useState(false);
   const [policyModal, setPolicyModal] = useState<PolicyKind | null>(null);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodsResponse | null>(null);
+
+  const refreshPaymentMethods = useCallback(() => {
+    apiService
+      .getPaymentMethods()
+      .then((methods) => setPaymentMethods(methods))
+      .catch(() => undefined);
+  }, []);
 
   // Sync data with dbService and restore server session + catalog
   const loadState = useCallback(() => {
@@ -68,6 +78,9 @@ export default function App() {
       .catch(() => {
         // Offline or API unavailable — keep local seed catalog
       });
+
+    // Load which payment methods are switched on (admin-controlled).
+    refreshPaymentMethods();
 
     // Restore signed-in session. Commercial mode: everyone starts signed out.
     // If the server session is gone but a stale local mirror exists (e.g. from
@@ -130,6 +143,7 @@ export default function App() {
         else if (completedOrder) setCompletedOrder(null);
         else if (isOrderLookupOpen) setIsOrderLookupOpen(false);
         else if (policyModal) setPolicyModal(null);
+        else if (isAdminOpen) setIsAdminOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -144,6 +158,7 @@ export default function App() {
     completedOrder,
     isOrderLookupOpen,
     policyModal,
+    isAdminOpen,
   ]);
 
   const handleAddToCart = (product: Product, quantity = 1, variantId?: string) => {
@@ -303,6 +318,7 @@ export default function App() {
       <Footer
         onOpenOrderLookup={() => setIsOrderLookupOpen(true)}
         onOpenPolicy={(policy) => setPolicyModal(policy)}
+        onOpenAdmin={() => setIsAdminOpen(true)}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat as Category);
           handleScrollToGrid();
@@ -406,6 +422,7 @@ export default function App() {
         currency={currency}
         discountPercent={checkoutDiscount}
         currentUser={currentUser}
+        paymentMethods={paymentMethods}
         onClose={() => setIsCheckoutOpen(false)}
         onOrderCompleted={handleOrderCompleted}
       />
@@ -428,6 +445,15 @@ export default function App() {
 
       {/* Privacy, Returns & Terms Policy Modal */}
       <PolicyModal kind={policyModal} onClose={() => setPolicyModal(null)} />
+
+      {/* Admin Panel (payment gateway toggles + webhooks) */}
+      <AdminPanel
+        isOpen={isAdminOpen}
+        onClose={() => {
+          setIsAdminOpen(false);
+          refreshPaymentMethods();
+        }}
+      />
     </div>
   );
 };

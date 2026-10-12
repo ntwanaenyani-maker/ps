@@ -38,6 +38,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const extra = (options as { headers?: Record<string, string> }).headers;
+  if (extra) Object.assign(headers, extra);
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers, credentials: 'include' });
   let data: unknown = null;
@@ -279,4 +281,76 @@ export const apiService = {
       body: JSON.stringify(params),
     });
   },
+
+  // ---- PAYMENT METHODS (public) ----
+  async getPaymentMethods(): Promise<PaymentMethodsResponse> {
+    const data = await request<{ success: boolean; data: PaymentMethodsResponse }>('/api/payment-methods');
+    return data.data;
+  },
+
+  // ---- ADMIN ----
+  async verifyAdminKey(key: string): Promise<boolean> {
+    try {
+      await request('/api/admin/secure-access', { headers: { 'X-API-Key': key } });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  async getAdminGateways(key: string): Promise<AdminGatewaysResponse> {
+    const data = await request<{ success: boolean; data: AdminGateway[]; webhooks: AdminGatewaysResponse['webhooks'] }>(
+      '/api/admin/gateways',
+      { headers: { 'X-API-Key': key } }
+    );
+    return { gateways: data.data, webhooks: data.webhooks };
+  },
+
+  async updateAdminGateways(
+    key: string,
+    toggles: Record<string, boolean>
+  ): Promise<Record<string, { enabled: boolean }>> {
+    const body: Record<string, { enabled: boolean }> = {};
+    Object.entries(toggles).forEach(([id, enabled]) => {
+      body[id] = { enabled: Boolean(enabled) };
+    });
+    const data = await request<{ success: boolean; data: Record<string, { enabled: boolean }> }>(
+      '/api/admin/gateways',
+      { method: 'PUT', headers: { 'X-API-Key': key }, body: JSON.stringify(body) }
+    );
+    return data.data;
+  },
 };
+
+export const adminService = {
+  verifyAdminKey: (key: string): Promise<boolean> => apiService.verifyAdminKey(key),
+  getAdminGateways: (key: string): Promise<AdminGatewaysResponse> => apiService.getAdminGateways(key),
+  updateAdminGateways: (key: string, toggles: Record<string, boolean>) =>
+    apiService.updateAdminGateways(key, toggles),
+};
+
+export interface PaymentMethodState {
+  enabled: boolean;
+  configured: boolean;
+}
+
+export interface PaymentMethodsResponse {
+  paypal: PaymentMethodState;
+  stitch: PaymentMethodState;
+  paystack: PaymentMethodState;
+  eft: PaymentMethodState;
+  cod: PaymentMethodState;
+}
+
+export interface AdminGateway {
+  id: string;
+  label: string;
+  mode: string;
+  enabled: boolean;
+  configured: boolean;
+}
+
+export interface AdminGatewaysResponse {
+  gateways: AdminGateway[];
+  webhooks: { paypal: { url: string; configured: boolean } };
+}

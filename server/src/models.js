@@ -110,7 +110,18 @@ const SettingsSchema = new Schema(
     storeAddress: { type: String, default: 'Johannesburg, South Africa' },
     whatsappNumber: { type: String, default: '27723819402' },
     currency: { type: String, default: 'ZAR' },
-    paymentGateway: { type: String, default: 'Paystack' },
+    paymentGateway: { type: String, default: 'PayPal' },
+    // Per-method on/off switches editable from the admin panel.
+    paymentGateways: {
+      type: Schema.Types.Mixed,
+      default: {
+        paypal: { enabled: true },
+        stitch: { enabled: false },
+        paystack: { enabled: false },
+        eft: { enabled: false },
+        cod: { enabled: false },
+      },
+    },
     defaultShipping: { type: Number, default: 65 },
     freeShippingThreshold: { type: Number, default: 450 },
   },

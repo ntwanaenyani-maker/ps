@@ -28,6 +28,9 @@ services:
         value: USD
       - key: PAYPAL_ZAR_PER_USD
         value: "18.5"
+      # PayPal webhook id — verifies events posted to /api/webhooks/paypal.
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
       # Stitch (Pay by Bank) credentials (client token, client_paymentrequest scope).
       - key: STITCH_CLIENT_ID
         sync: false

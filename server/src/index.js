@@ -30,12 +30,63 @@ const PORT = process.env.PORT || 3001;
 const SESSION_COOKIE = 'ps_session';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'phethagatsa-admin-2026-secure-key';
 const VALID_PAYMENT = new Set(['card', 'instant-eft', 'payfast', 'cod', 'wire', 'paystack', 'paypal', 'stitch']);
+// Canonical payment methods surfaced to the storefront. `eft` groups the offline
+// bank-transfer options (wire/instant-eft/payfast); `card` is served by PayPal.
+const PAYMENT_METHODS = ['paypal', 'stitch', 'paystack', 'eft', 'cod'];
+const DEFAULT_GATEWAYS = {
+  paypal: { enabled: true },
+  stitch: { enabled: false },
+  paystack: { enabled: false },
+  eft: { enabled: false },
+  cod: { enabled: false },
+};
+function methodToGatewayKey(method) {
+  switch (method) {
+    case 'paypal':
+    case 'card':
+      return 'paypal';
+    case 'stitch':
+      return 'stitch';
+    case 'paystack':
+      return 'paystack';
+    case 'cod':
+      return 'cod';
+    case 'wire':
+    case 'instant-eft':
+    case 'payfast':
+      return 'eft';
+    default:
+      return null;
+  }
+}
+function normalizeGateways(raw) {
+  const out = {};
+  for (const m of PAYMENT_METHODS) {
+    const v = raw ? raw[m] : null;
+    const enabled = v && typeof v === 'object' ? Boolean(v.enabled) : Boolean(v);
+    out[m] = { enabled };
+  }
+  return out;
+}
+async function getGateways() {
+  const s = await settings.get();
+  const val = (s && typeof s.toObject === 'function' ? s.toObject() : s) || {};
+  return normalizeGateways(val.paymentGateways || DEFAULT_GATEWAYS);
+}
 const PAYPAL_BASE =
   process.env.PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 const STITCH_TOKEN_URL = 'https://secure.stitch.money/connect/token';
 const STITCH_GRAPHQL_URL = 'https://api.stitch.money/graphql';
 
-app.use(express.json());
+app.use(
+  express.json({
+    limit: '2mb',
+    verify: (req, _res, buf) => {
+      // Keep the raw body so webhook signatures can be verified.
+      req.rawBody = buf?.toString('utf8');
+    },
+  })
+);
 
 // CORS: reflect the request origin so credentialed + Bearer requests work.
 const allowed = (process.env.CORS_ORIGIN || '*').split(',').map((s) => s.trim());
@@ -606,6 +657,12 @@ app.post(
     }
 
     const paymentMethod = VALID_PAYMENT.has(body.paymentMethod) ? body.paymentMethod : 'wire';
+    // Reject orders whose payment method has been switched off in the admin panel.
+    const gateways = await getGateways();
+    const gkey = methodToGatewayKey(paymentMethod);
+    if (!gkey || !gateways[gkey]?.enabled) {
+      return res.status(409).json({ error: 'That payment method is currently unavailable. Please choose another option.' });
+    }
     const user = await sessions.findUserByToken(extractToken(req));
 
     const doc = {
@@ -718,13 +775,18 @@ app.post(
 );
 
 // ---- payments (PayPal Orders v2) ----------------------------------------------
-app.get('/api/pay/paypal/status', (_req, res) => {
-  res.json({ paypalConfigured: paypalConfigured() });
-});
+app.get('/api/pay/paypal/status', wrap(async (_req, res) => {
+  const gateways = await getGateways();
+  res.json({ paypalConfigured: paypalConfigured(), enabled: gateways.paypal.enabled });
+}));
 
 app.post(
   '/api/pay/paypal/create',
   wrap(async (req, res) => {
+    const gateways = await getGateways();
+    if (!gateways.paypal.enabled) {
+      return res.status(503).json({ error: 'PayPal payments are currently switched off.' });
+    }
     if (!paypalConfigured()) {
       return res.status(503).json({ error: 'Card / PayPal payments are not configured yet.' });
     }
@@ -746,6 +808,7 @@ app.post(
         purchase_units: [
           {
             reference_id: orderNumber || undefined,
+            custom_id: orderNumber || undefined,
             description: orderNumber ? `Phethagatsa order ${orderNumber}` : 'Phethagatsa order',
             amount: { currency_code: settleCurrency, value: chargeValue.toFixed(2) },
           },
@@ -763,6 +826,10 @@ app.post(
 app.post(
   '/api/pay/paypal/capture',
   wrap(async (req, res) => {
+    const gateways = await getGateways();
+    if (!gateways.paypal.enabled) {
+      return res.status(503).json({ error: 'PayPal payments are currently switched off.' });
+    }
     if (!paypalConfigured()) {
       return res.status(503).json({ error: 'Card / PayPal payments are not configured yet.' });
     }
@@ -796,13 +863,15 @@ app.get(
   '/api/pay/stitch/status',
   wrap(async (_req, res) => {
     const env = process.env.STITCH_ENV || 'test';
-    if (!stitchConfigured()) return res.json({ stitchConfigured: false, env });
+    const gateways = await getGateways();
+    if (!gateways.stitch.enabled) return res.json({ stitchConfigured: false, enabled: false, env });
+    if (!stitchConfigured()) return res.json({ stitchConfigured: false, enabled: true, env });
     // Verify the credentials actually authenticate; otherwise hide Pay by Bank.
     try {
       await stitchClientToken();
-      res.json({ stitchConfigured: true, env });
+      res.json({ stitchConfigured: true, enabled: true, env });
     } catch (err) {
-      res.json({ stitchConfigured: false, env, error: err.message || 'Stitch authentication failed' });
+      res.json({ stitchConfigured: false, enabled: true, env, error: err.message || 'Stitch authentication failed' });
     }
   })
 );
@@ -810,6 +879,10 @@ app.get(
 app.post(
   '/api/pay/stitch/create',
   wrap(async (req, res) => {
+    const gateways = await getGateways();
+    if (!gateways.stitch.enabled) {
+      return res.status(503).json({ error: 'Pay by Bank is currently switched off.' });
+    }
     if (!stitchConfigured()) {
       return res.status(503).json({ error: 'Pay by Bank is not configured yet.' });
     }
@@ -863,6 +936,10 @@ app.post(
 app.post(
   '/api/pay/stitch/confirm',
   wrap(async (req, res) => {
+    const gateways = await getGateways();
+    if (!gateways.stitch.enabled) {
+      return res.status(503).json({ error: 'Pay by Bank is currently switched off.' });
+    }
     if (!stitchConfigured()) {
       return res.status(503).json({ error: 'Pay by Bank is not configured yet.' });
     }
@@ -901,6 +978,26 @@ app.post(
     res.json({
       simulated: true,
       result: data?.testClientPaymentInitiationRequestSimulateComplete || null,
+    });
+  })
+);
+
+// ---- payment methods (public) -------------------------------------------------
+// Which checkout methods are currently switched on, plus configuration state so
+// the storefront only ever shows working options.
+app.get(
+  '/api/payment-methods',
+  wrap(async (_req, res) => {
+    const gateways = await getGateways();
+    res.json({
+      success: true,
+      data: {
+        paypal: { enabled: gateways.paypal.enabled, configured: paypalConfigured() },
+        stitch: { enabled: gateways.stitch.enabled, configured: stitchConfigured() },
+        paystack: { enabled: gateways.paystack.enabled, configured: Boolean(process.env.PAYSTACK_SECRET_KEY) },
+        eft: { enabled: gateways.eft.enabled, configured: true },
+        cod: { enabled: gateways.cod.enabled, configured: true },
+      },
     });
   })
 );
@@ -961,6 +1058,72 @@ app.get('/api/admin/secure-access', (req, res) => {
   res.json({ success: true, message: 'Admin access granted' });
 });
 
+// ---- admin: payment gateway control -------------------------------------------
+app.get(
+  '/api/admin/gateways',
+  wrap(async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const gateways = await getGateways();
+    const configured = {
+      paypal: paypalConfigured(),
+      stitch: stitchConfigured(),
+      paystack: Boolean(process.env.PAYSTACK_SECRET_KEY),
+      eft: true,
+      cod: true,
+    };
+    const meta = {
+      paypal: { label: 'Card & PayPal', mode: process.env.PAYPAL_ENV === 'live' ? 'live' : 'sandbox' },
+      stitch: { label: 'Pay by Bank (Stitch)', mode: process.env.STITCH_ENV || 'test' },
+      paystack: { label: 'Paystack (card)', mode: process.env.PAYSTACK_SECRET_KEY ? 'live' : 'unconfigured' },
+      eft: { label: 'Offline EFT / Bank transfer', mode: 'offline' },
+      cod: { label: 'Pay on Delivery', mode: 'offline' },
+    };
+    res.json({
+      success: true,
+      data: PAYMENT_METHODS.map((m) => ({
+        id: m,
+        label: meta[m].label,
+        mode: meta[m].mode,
+        enabled: gateways[m].enabled,
+        configured: configured[m],
+      })),
+      webhooks: {
+        paypal: {
+          url: `${publicBaseUrl(req)}/api/webhooks/paypal`,
+          configured: Boolean(process.env.PAYPAL_WEBHOOK_ID),
+        },
+      },
+    });
+  })
+);
+
+app.put(
+  '/api/admin/gateways',
+  wrap(async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const incoming = req.body || {};
+    const current = await getGateways();
+    const next = {};
+    for (const m of PAYMENT_METHODS) {
+      const v = incoming[m];
+      if (v === undefined) {
+        next[m] = { enabled: current[m].enabled };
+      } else {
+        next[m] = { enabled: Boolean(typeof v === 'object' ? v.enabled : v) };
+      }
+    }
+    await settings.save({ paymentGateways: next, paymentGateway: next.paypal.enabled ? 'PayPal' : 'Offline' });
+    res.json({ success: true, data: next });
+  })
+);
+
+function publicBaseUrl(req) {
+  const origin = allowed.find((a) => a !== '*');
+  if (origin) return origin.replace(/\/+$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  return `${proto}://${req.headers.host}`;
+}
+
 // Send a test transactional email via Brevo (admin only).
 app.post(
   '/api/email/test',
@@ -975,6 +1138,65 @@ app.post(
       text: 'This is a test email from Phethagatsa Solutions. Brevo integration is working.',
     });
     res.json({ ok: true, messageId: result.messageId || null });
+  })
+);
+
+// ---- webhooks -----------------------------------------------------------------
+// PayPal sends capture/order events here. We verify the signature (when a
+// webhook id is configured) and mark the matching order paid/refunded.
+app.post(
+  '/api/webhooks/paypal',
+  wrap(async (req, res) => {
+    const event = req.body || {};
+    const webhookId = process.env.PAYPAL_WEBHOOK_ID;
+    if (webhookId) {
+      try {
+        const token = await paypalAccessToken();
+        const vr = await fetchWithTimeout(`${PAYPAL_BASE}/v1/notifications/verify-webhook-signature`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            auth_algo: req.headers['paypal-auth-algo'],
+            cert_url: req.headers['paypal-cert-url'],
+            transmission_id: req.headers['paypal-transmission-id'],
+            transmission_sig: req.headers['paypal-transmission-sig'],
+            transmission_time: req.headers['paypal-transmission-time'],
+            webhook_id: webhookId,
+            webhook_event: event,
+          }),
+        });
+        const vd = await vr.json().catch(() => ({}));
+        if (vd.verification_status !== 'SUCCESS') {
+          return res.status(400).json({ error: 'Invalid webhook signature' });
+        }
+      } catch (err) {
+        return res.status(400).json({ error: 'Webhook verification failed' });
+      }
+    }
+
+    const type = event.event_type || '';
+    const resource = event.resource || {};
+    const orderNumber =
+      resource.custom_id ||
+      resource.purchase_units?.[0]?.custom_id ||
+      resource.purchase_units?.[0]?.reference_id ||
+      null;
+
+    if (orderNumber && (type === 'PAYMENT.CAPTURE.COMPLETED' || type === 'CHECKOUT.ORDER.APPROVED')) {
+      const updated = await orders.update(String(orderNumber).toUpperCase(), {
+        paymentStatus: 'paid',
+        status: 'confirmed',
+        paypalOrderId: resource.id || resource.supplementary_data?.related_ids?.order_id || null,
+        paidAt: new Date(),
+      });
+      if (updated) sendSafe(sendOrderPaid(mapOrder(updated)));
+    } else if (orderNumber && type === 'PAYMENT.CAPTURE.DENIED') {
+      await orders.update(String(orderNumber).toUpperCase(), { paymentStatus: 'failed' });
+    } else if (orderNumber && (type === 'PAYMENT.CAPTURE.REFUNDED' || type === 'PAYMENT.CAPTURE.REVERSED')) {
+      await orders.update(String(orderNumber).toUpperCase(), { paymentStatus: 'refunded' });
+    }
+
+    res.json({ received: true });
   })
 );
 

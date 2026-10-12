@@ -5,7 +5,14 @@
   "storeAddress": "123 Main Street, Pretoria / Johannesburg, Gauteng, 0001",
   "whatsappNumber": "27723819402",
   "currency": "ZAR",
-  "paymentGateway": "PayFast / Instant EFT (Ozow, Capitec)",
+  "paymentGateway": "PayPal",
+  "paymentGateways": {
+    "paypal": { "enabled": true },
+    "stitch": { "enabled": false },
+    "paystack": { "enabled": false },
+    "eft": { "enabled": false },
+    "cod": { "enabled": false }
+  },
   "defaultShipping": 75,
   "freeShippingThreshold": 450
 }

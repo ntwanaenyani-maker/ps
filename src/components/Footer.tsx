@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, Check, MessageCircle, Mail, Phone, MapPin } from 'lucide-react';
+import { ArrowRight, Check, MessageCircle, Mail, Phone, MapPin, Lock } from 'lucide-react';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 import { PolicyKind } from './PolicyModal';
 
@@ -7,12 +7,14 @@ interface FooterProps {
   onOpenOrderLookup: () => void;
   onOpenPolicy: (policy: PolicyKind) => void;
   onSelectCategory: (cat: string) => void;
+  onOpenAdmin: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   onOpenOrderLookup,
   onOpenPolicy,
   onSelectCategory,
+  onOpenAdmin,
 }) => {
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
@@ -260,6 +262,13 @@ export const Footer: React.FC<FooterProps> = ({
             </button>
             <button onClick={() => onOpenPolicy('terms')} className="text-stone-400 hover:text-white cursor-pointer">
               Terms
+            </button>
+            <button
+              onClick={onOpenAdmin}
+              className="text-stone-400 hover:text-white cursor-pointer flex items-center gap-1"
+            >
+              <Lock className="w-3 h-3" />
+              Admin
             </button>
           </div>
         </div>

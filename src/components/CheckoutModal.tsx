@@ -9,7 +9,10 @@ import { generateOrderRef } from '../lib/orderRef';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 import { PayPalPayment } from './PayPalPayment';
 import { StitchPayment } from './StitchPayment';
+import { PaymentMethodsResponse } from '../services/api';
 import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Loader2 } from 'lucide-react';
+
+type CheckoutMethod = 'paypal' | 'stitch' | 'instant-eft' | 'payfast' | 'cod' | 'wire';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -17,6 +20,7 @@ interface CheckoutModalProps {
   currency: Currency;
   discountPercent: number;
   currentUser: UserAccount | null;
+  paymentMethods: PaymentMethodsResponse | null;
   onClose: () => void;
   onOrderCompleted: (order: Order) => void;
 }
@@ -27,6 +31,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   currency,
   discountPercent,
   currentUser,
+  paymentMethods,
   onClose,
   onOrderCompleted,
 }) => {
@@ -41,9 +46,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     country: 'South Africa',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<
-    'paypal' | 'stitch' | 'instant-eft' | 'payfast' | 'cod' | 'wire'
-  >('wire'); // Offline EFT default
+  const [paymentMethod, setPaymentMethod] = useState<CheckoutMethod>('wire');
   const [autoSendWhatsAppEft, setAutoSendWhatsAppEft] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -51,6 +54,36 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [stitchOrder, setStitchOrder] = useState<Order | null>(null);
 
   const provisionalRef = React.useMemo(() => generateOrderRef(), []);
+
+  // Which methods are switched on in the admin panel. When the list hasn't
+  // loaded yet we fall back to the historical defaults (all shown) so checkout
+  // never breaks.
+  const showPaypal = !paymentMethods || (paymentMethods.paypal.enabled && paymentMethods.paypal.configured);
+  const showStitch = !paymentMethods || (paymentMethods.stitch.enabled && paymentMethods.stitch.configured);
+  const showEft = !paymentMethods || paymentMethods.eft.enabled;
+  const showCod = !paymentMethods || paymentMethods.cod.enabled;
+
+  const isShown = (m: CheckoutMethod): boolean => {
+    if (m === 'paypal') return showPaypal;
+    if (m === 'stitch') return showStitch;
+    if (m === 'wire' || m === 'instant-eft' || m === 'payfast') return showEft;
+    if (m === 'cod') return showCod;
+    return false;
+  };
+
+  const firstAvailable = React.useMemo<CheckoutMethod>(() => {
+    if (showPaypal) return 'paypal';
+    if (showStitch) return 'stitch';
+    if (showCod) return 'cod';
+    if (showEft) return 'wire';
+    return 'wire';
+  }, [showPaypal, showStitch, showCod, showEft]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    setPaymentMethod((prev) => (isShown(prev) ? prev : firstAvailable));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, firstAvailable]);
 
   if (!isOpen || cart.length === 0) return null;
 
@@ -269,63 +302,78 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </h3>
 
                 {/* Method Tabs */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('wire')}
-                    className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
-                      paymentMethod === 'wire'
-                        ? 'border-emerald-800 bg-emerald-950 text-white shadow-xs'
-                        : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                    }`}
-                  >
-                    <Landmark className="w-4 h-4 mb-1.5 text-emerald-400" />
-                    <span className="text-xs font-semibold">Offline EFT Payment</span>
-                    <span className="text-[10px] font-mono opacity-90 text-emerald-200">Auto WhatsApp POP</span>
-                  </button>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {showEft && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('wire')}
+                      className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
+                        paymentMethod === 'wire'
+                          ? 'border-emerald-800 bg-emerald-950 text-white shadow-xs'
+                          : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                      }`}
+                    >
+                      <Landmark className="w-4 h-4 mb-1.5 text-emerald-400" />
+                      <span className="text-xs font-semibold">Offline EFT Payment</span>
+                      <span className="text-[10px] font-mono opacity-90 text-emerald-200">Auto WhatsApp POP</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('paypal')}
-                    className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
-                      paymentMethod === 'paypal'
-                        ? 'border-stone-950 bg-stone-950 text-white shadow-xs'
-                        : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4 mb-1.5" />
-                    <span className="text-xs font-semibold">Card & PayPal</span>
-                    <span className="text-[10px] font-mono opacity-80">Secure online payment</span>
-                  </button>
+                  {showPaypal && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('paypal')}
+                      className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
+                        paymentMethod === 'paypal'
+                          ? 'border-stone-950 bg-stone-950 text-white shadow-xs'
+                          : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4 mb-1.5" />
+                      <span className="text-xs font-semibold">Card & PayPal</span>
+                      <span className="text-[10px] font-mono opacity-80">Secure online payment</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('stitch')}
-                    className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
-                      paymentMethod === 'stitch'
-                        ? 'border-emerald-800 bg-emerald-950 text-white shadow-xs'
-                        : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                    }`}
-                  >
-                    <Landmark className="w-4 h-4 mb-1.5 text-emerald-400" />
-                    <span className="text-xs font-semibold">Pay by Bank</span>
-                    <span className="text-[10px] font-mono opacity-90 text-emerald-200">Capitec · Absa · PayShap</span>
-                  </button>
+                  {showStitch && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('stitch')}
+                      className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
+                        paymentMethod === 'stitch'
+                          ? 'border-emerald-800 bg-emerald-950 text-white shadow-xs'
+                          : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                      }`}
+                    >
+                      <Landmark className="w-4 h-4 mb-1.5 text-emerald-400" />
+                      <span className="text-xs font-semibold">Pay by Bank</span>
+                      <span className="text-[10px] font-mono opacity-90 text-emerald-200">Capitec · Absa · PayShap</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('cod')}
-                    className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
-                      paymentMethod === 'cod'
-                        ? 'border-stone-950 bg-stone-950 text-white shadow-xs'
-                        : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                    }`}
-                  >
-                    <Banknote className="w-4 h-4 mb-1.5" />
-                    <span className="text-xs font-semibold">Pay On Delivery</span>
-                    <span className="text-[10px] font-mono opacity-80">Cash or POS</span>
-                  </button>
+                  {showCod && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('cod')}
+                      className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
+                        paymentMethod === 'cod'
+                          ? 'border-stone-950 bg-stone-950 text-white shadow-xs'
+                          : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                      }`}
+                    >
+                      <Banknote className="w-4 h-4 mb-1.5" />
+                      <span className="text-xs font-semibold">Pay On Delivery</span>
+                      <span className="text-[10px] font-mono opacity-80">Cash or POS</span>
+                    </button>
+                  )}
                 </div>
+
+                {!showEft && !showPaypal && !showStitch && !showCod && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xs text-xs text-amber-800">
+                    No online payment methods are available right now. Please send your order on
+                    WhatsApp and we'll arrange payment with you directly.
+                  </div>
+                )}
 
                 {/* Conditional Form Fields */}
                 {paymentMethod === 'wire' && (
@@ -461,7 +509,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 {submitError && (
                   <div className="p-3 bg-rose-50 border border-rose-200 rounded-xs text-rose-700 text-xs">{submitError}</div>
                 )}
-                {!((paymentMethod === 'paypal' && paypalOrder) || (paymentMethod === 'stitch' && stitchOrder)) && (
+                {(showEft || showPaypal || showStitch || showCod) &&
+                  !((paymentMethod === 'paypal' && paypalOrder) || (paymentMethod === 'stitch' && stitchOrder)) && (
                   <button
                     type="submit"
                     disabled={isSubmitting}
