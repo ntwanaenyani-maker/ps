@@ -336,6 +336,7 @@ export interface PaymentMethodState {
 
 export interface PaymentMethodsResponse {
   paypal: PaymentMethodState;
+  payshap: PaymentMethodState;
   stitch: PaymentMethodState;
   paystack: PaymentMethodState;
   eft: PaymentMethodState;

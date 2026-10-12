@@ -46,13 +46,14 @@ export function getOfflineEftWhatsAppUrl(
   customerName: string,
   totalZAR: number,
   items: CartItem[],
-  customerPhone?: string
+  customerPhone?: string,
+  methodName = 'Offline EFT Payment'
 ): string {
   const itemList = items
     .map((item, index) => `• ${item.product.name} (x${item.quantity}) - ${formatMoney(item.product.price * item.quantity, 'ZAR')}`)
     .join('\n');
 
-  const message = `*Dumela Phethagatsa Solutions!* 🇿🇦\n\nI have completed an *Offline EFT Payment* for my order!\n\n*Order Ref:* #${orderRef}\n*Customer:* ${customerName}\n*Phone:* ${customerPhone || 'Provided on checkout'}\n*Total Amount Paid:* ${formatMoney(totalZAR, 'ZAR')}\n\n*Order Items:*\n${itemList}\n\n📎 *Attaching Proof of Payment (POP) below.*\nPlease verify and confirm dispatch with The Courier Guy. Ke a leboga!`;
+  const message = `*Dumela Phethagatsa Solutions!* 🇿🇦\n\nI have completed a *${methodName}* for my order!\n\n*Order Ref:* #${orderRef}\n*Customer:* ${customerName}\n*Phone:* ${customerPhone || 'Provided on checkout'}\n*Total Amount Paid:* ${formatMoney(totalZAR, 'ZAR')}\n\n*Order Items:*\n${itemList}\n\n📎 *Attaching Proof of Payment (POP) below.*\nPlease verify and confirm dispatch with The Courier Guy. Ke a leboga!`;
 
   return `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }

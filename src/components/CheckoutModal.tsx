@@ -10,9 +10,9 @@ import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 import { PayPalPayment } from './PayPalPayment';
 import { StitchPayment } from './StitchPayment';
 import { PaymentMethodsResponse } from '../services/api';
-import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Loader2 } from 'lucide-react';
+import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Loader2, Zap } from 'lucide-react';
 
-type CheckoutMethod = 'paypal' | 'stitch' | 'instant-eft' | 'payfast' | 'cod' | 'wire';
+type CheckoutMethod = 'paypal' | 'payshap' | 'stitch' | 'instant-eft' | 'payfast' | 'cod' | 'wire';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -46,7 +46,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     country: 'South Africa',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<CheckoutMethod>('wire');
+  const [paymentMethod, setPaymentMethod] = useState<CheckoutMethod>('payshap');
   const [autoSendWhatsAppEft, setAutoSendWhatsAppEft] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -59,25 +59,30 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // loaded yet we fall back to the historical defaults (all shown) so checkout
   // never breaks.
   const showPaypal = !paymentMethods || (paymentMethods.paypal.enabled && paymentMethods.paypal.configured);
+  const showPayshap = !paymentMethods || paymentMethods.payshap.enabled;
   const showStitch = !paymentMethods || (paymentMethods.stitch.enabled && paymentMethods.stitch.configured);
   const showEft = !paymentMethods || paymentMethods.eft.enabled;
   const showCod = !paymentMethods || paymentMethods.cod.enabled;
 
   const isShown = (m: CheckoutMethod): boolean => {
     if (m === 'paypal') return showPaypal;
+    if (m === 'payshap') return showPayshap;
     if (m === 'stitch') return showStitch;
     if (m === 'wire' || m === 'instant-eft' || m === 'payfast') return showEft;
     if (m === 'cod') return showCod;
     return false;
   };
 
+  // PayShap is the recommended, fastest option, so it is selected by default
+  // when available — followed by EFT, then Card & PayPal.
   const firstAvailable = React.useMemo<CheckoutMethod>(() => {
+    if (showPayshap) return 'payshap';
+    if (showEft) return 'wire';
     if (showPaypal) return 'paypal';
     if (showStitch) return 'stitch';
     if (showCod) return 'cod';
-    if (showEft) return 'wire';
     return 'wire';
-  }, [showPaypal, showStitch, showCod, showEft]);
+  }, [showPayshap, showEft, showPaypal, showStitch, showCod]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -138,14 +143,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         return;
       }
 
-      // Auto-send WhatsApp if Offline EFT is chosen and auto-send is checked
-      if ((paymentMethod === 'wire' || paymentMethod === 'instant-eft') && autoSendWhatsAppEft) {
+      // Auto-send WhatsApp if an offline bank method (PayShap / EFT) is chosen.
+      if ((paymentMethod === 'wire' || paymentMethod === 'instant-eft' || paymentMethod === 'payshap') && autoSendWhatsAppEft) {
         const whatsappUrl = getOfflineEftWhatsAppUrl(
           order.id,
           customer.fullName,
           total,
           cart,
-          customer.phone
+          customer.phone,
+          paymentMethod === 'payshap' ? 'PayShap' : 'Offline EFT Payment'
         );
         try {
           window.open(whatsappUrl, '_blank');
@@ -303,6 +309,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 {/* Method Tabs */}
                 <div className="grid grid-cols-2 gap-2 mb-4">
+                  {showPayshap && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('payshap')}
+                      className={`relative p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
+                        paymentMethod === 'payshap'
+                          ? 'border-emerald-800 bg-emerald-950 text-white shadow-xs'
+                          : 'border-emerald-300 bg-emerald-50/60 text-stone-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      <span className="absolute top-2 right-2 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-600 text-white">
+                        Recommended
+                      </span>
+                      <Zap className="w-4 h-4 mb-1.5 text-emerald-500" />
+                      <span className="text-xs font-semibold">PayShap</span>
+                      <span className="text-[10px] font-mono opacity-90 text-emerald-700">
+                        Instant · Fastest
+                      </span>
+                    </button>
+                  )}
+
                   {showEft && (
                     <button
                       type="button"
@@ -368,7 +395,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   )}
                 </div>
 
-                {!showEft && !showPaypal && !showStitch && !showCod && (
+                {!showPayshap && !showEft && !showPaypal && !showStitch && !showCod && (
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xs text-xs text-amber-800">
                     No online payment methods are available right now. Please send your order on
                     WhatsApp and we'll arrange payment with you directly.
@@ -376,6 +403,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 )}
 
                 {/* Conditional Form Fields */}
+                {paymentMethod === 'payshap' && (
+                  <div className="space-y-3">
+                    <PayInstructions
+                      variant="payshap"
+                      orderRef={provisionalRef}
+                      totalFormatted={formatPrice(total, currency)}
+                      customerName={customer.fullName}
+                    />
+                    <label className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xs text-xs cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={autoSendWhatsAppEft}
+                        onChange={(e) => setAutoSendWhatsAppEft(e.target.checked)}
+                        className="rounded border-emerald-300 text-emerald-700 focus:ring-emerald-500 h-4 w-4"
+                      />
+                      <span className="text-emerald-900 font-medium text-[11px]">
+                        Automatically open WhatsApp with your PayShap proof of payment after placing the order
+                      </span>
+                    </label>
+                  </div>
+                )}
+
                 {paymentMethod === 'wire' && (
                   <div className="space-y-3">
                     <PayInstructions
@@ -509,7 +558,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 {submitError && (
                   <div className="p-3 bg-rose-50 border border-rose-200 rounded-xs text-rose-700 text-xs">{submitError}</div>
                 )}
-                {(showEft || showPaypal || showStitch || showCod) &&
+                {(showPayshap || showEft || showPaypal || showStitch || showCod) &&
                   !((paymentMethod === 'paypal' && paypalOrder) || (paymentMethod === 'stitch' && stitchOrder)) && (
                   <button
                     type="submit"
@@ -529,7 +578,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                             ? `Continue to PayPal · ${formatPrice(total, currency)}`
                             : paymentMethod === 'stitch'
                               ? `Continue to Pay by Bank · ${formatPrice(total, currency)}`
-                              : `Authorize Order · ${formatPrice(total, currency)}`}
+                              : paymentMethod === 'payshap'
+                                ? `Place PayShap Order · ${formatPrice(total, currency)}`
+                                : `Authorize Order · ${formatPrice(total, currency)}`}
                         </span>
                       </>
                     )}

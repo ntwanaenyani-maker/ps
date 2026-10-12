@@ -34,10 +34,19 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
     { key: 'delivered', label: 'Handover Completed' },
   ];
 
+  const isPayshap = order.paymentMethod === 'payshap';
   const isEft = order.paymentMethod === 'wire' || order.paymentMethod === 'instant-eft';
+  const isOfflineBank = isEft || isPayshap;
 
-  const whatsappShareUrl = isEft
-    ? getOfflineEftWhatsAppUrl(order.id, order.customer.fullName, order.total, order.items, order.customer.phone)
+  const whatsappShareUrl = isOfflineBank
+    ? getOfflineEftWhatsAppUrl(
+        order.id,
+        order.customer.fullName,
+        order.total,
+        order.items,
+        order.customer.phone,
+        isPayshap ? 'PayShap' : 'Offline EFT Payment'
+      )
     : `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(
         `Dumela Phethagatsa Store! I placed Order Reference #${order.id} for total ${formatPrice(order.total, currency)}. Recipient: ${order.customer.fullName}.`
       )}`;
@@ -113,12 +122,14 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </div>
         </div>
 
-        {/* If EFT Payment Method: Render Banking Details */}
-        {(order.paymentMethod === 'wire' || order.paymentMethod === 'instant-eft') && (
+        {/* If PayShap / EFT Payment Method: Render Banking Details */}
+        {isOfflineBank && (
           <div className="py-5 border-b border-stone-200">
             <PayInstructions
+              variant={isPayshap ? 'payshap' : 'eft'}
               orderRef={order.id}
               totalFormatted={formatPrice(order.total, currency)}
+              customerName={order.customer.fullName}
             />
           </div>
         )}
@@ -145,7 +156,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                 <span>Financial Settlement</span>
               </div>
               <p className="text-stone-600 text-[11px] leading-relaxed">
-                Payment Type: <span className="uppercase font-mono font-medium text-stone-900">{order.paymentMethod === 'wire' || order.paymentMethod === 'instant-eft' ? 'EFT Bank Transfer' : order.paymentMethod === 'paypal' ? 'Card / PayPal' : order.paymentMethod === 'stitch' ? 'Pay by Bank (Stitch)' : order.paymentMethod.toUpperCase()}</span><br />
+                Payment Type: <span className="uppercase font-mono font-medium text-stone-900">{order.paymentMethod === 'wire' || order.paymentMethod === 'instant-eft' ? 'EFT Bank Transfer' : order.paymentMethod === 'payshap' ? 'PayShap (Instant)' : order.paymentMethod === 'paypal' ? 'Card / PayPal' : order.paymentMethod === 'stitch' ? 'Pay by Bank (Stitch)' : order.paymentMethod.toUpperCase()}</span><br />
                 Amount: <span className="font-mono font-semibold text-stone-950">{formatPrice(order.total, currency)}</span><br />
                 Courier Insurance: Covered<br />
                 Date: {order.createdAt}

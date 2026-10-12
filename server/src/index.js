@@ -29,15 +29,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const SESSION_COOKIE = 'ps_session';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'phethagatsa-admin-2026-secure-key';
-const VALID_PAYMENT = new Set(['card', 'instant-eft', 'payfast', 'cod', 'wire', 'paystack', 'paypal', 'stitch']);
+const VALID_PAYMENT = new Set(['card', 'instant-eft', 'payfast', 'cod', 'wire', 'paystack', 'paypal', 'stitch', 'payshap']);
 // Canonical payment methods surfaced to the storefront. `eft` groups the offline
-// bank-transfer options (wire/instant-eft/payfast); `card` is served by PayPal.
-const PAYMENT_METHODS = ['paypal', 'stitch', 'paystack', 'eft', 'cod'];
+// bank-transfer options (wire/instant-eft/payfast); `card` is served by PayPal;
+// `payshap` is an instant bank transfer (no gateway integration, details shown).
+const PAYMENT_METHODS = ['paypal', 'payshap', 'eft', 'stitch', 'paystack', 'cod'];
 const DEFAULT_GATEWAYS = {
   paypal: { enabled: true },
+  payshap: { enabled: true },
+  eft: { enabled: true },
   stitch: { enabled: false },
   paystack: { enabled: false },
-  eft: { enabled: false },
   cod: { enabled: false },
 };
 function methodToGatewayKey(method) {
@@ -45,6 +47,8 @@ function methodToGatewayKey(method) {
     case 'paypal':
     case 'card':
       return 'paypal';
+    case 'payshap':
+      return 'payshap';
     case 'stitch':
       return 'stitch';
     case 'paystack':
@@ -63,7 +67,15 @@ function normalizeGateways(raw) {
   const out = {};
   for (const m of PAYMENT_METHODS) {
     const v = raw ? raw[m] : null;
-    const enabled = v && typeof v === 'object' ? Boolean(v.enabled) : Boolean(v);
+    // Methods absent from a stored config fall back to their code default, so
+    // newly added methods (e.g. payshap) pick up the intended default.
+    const fallback = DEFAULT_GATEWAYS[m]?.enabled ?? false;
+    const enabled =
+      v === undefined || v === null
+        ? fallback
+        : typeof v === 'object'
+          ? Boolean(v.enabled)
+          : Boolean(v);
     out[m] = { enabled };
   }
   return out;
@@ -993,6 +1005,7 @@ app.get(
       success: true,
       data: {
         paypal: { enabled: gateways.paypal.enabled, configured: paypalConfigured() },
+        payshap: { enabled: gateways.payshap.enabled, configured: true },
         stitch: { enabled: gateways.stitch.enabled, configured: stitchConfigured() },
         paystack: { enabled: gateways.paystack.enabled, configured: Boolean(process.env.PAYSTACK_SECRET_KEY) },
         eft: { enabled: gateways.eft.enabled, configured: true },
@@ -1066,6 +1079,7 @@ app.get(
     const gateways = await getGateways();
     const configured = {
       paypal: paypalConfigured(),
+      payshap: true,
       stitch: stitchConfigured(),
       paystack: Boolean(process.env.PAYSTACK_SECRET_KEY),
       eft: true,
@@ -1073,6 +1087,7 @@ app.get(
     };
     const meta = {
       paypal: { label: 'Card & PayPal', mode: process.env.PAYPAL_ENV === 'live' ? 'live' : 'sandbox' },
+      payshap: { label: 'PayShap (instant bank)', mode: 'offline' },
       stitch: { label: 'Pay by Bank (Stitch)', mode: process.env.STITCH_ENV || 'test' },
       paystack: { label: 'Paystack (card)', mode: process.env.PAYSTACK_SECRET_KEY ? 'live' : 'unconfigured' },
       eft: { label: 'Offline EFT / Bank transfer', mode: 'offline' },

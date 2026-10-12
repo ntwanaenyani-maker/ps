@@ -116,9 +116,10 @@ const SettingsSchema = new Schema(
       type: Schema.Types.Mixed,
       default: {
         paypal: { enabled: true },
+        payshap: { enabled: true },
+        eft: { enabled: true },
         stitch: { enabled: false },
         paystack: { enabled: false },
-        eft: { enabled: false },
         cod: { enabled: false },
       },
     },
