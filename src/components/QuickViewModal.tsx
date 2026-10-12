@@ -37,6 +37,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   const [addedNotice, setAddedNotice] = useState(false);
   const [wishlistNotice, setWishlistNotice] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<'craft' | 'specs' | 'delivery' | null>('specs');
+  const [isGalleryPaused, setIsGalleryPaused] = useState(false);
 
   const relatedProducts = dbService.getRelatedProducts(product.id, 4);
   const reviewBreakdown = dbService.getReviewBreakdown(product.id);
@@ -90,6 +91,17 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   };
 
   useEffect(() => {
+    if (galleryImages.length <= 1 || isGalleryPaused) return;
+    const timer = window.setInterval(() => {
+      setActiveImage((prev) => {
+        const idx = galleryImages.indexOf(prev);
+        return galleryImages[(idx + 1) % galleryImages.length];
+      });
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [galleryImages, isGalleryPaused]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') handlePrevSlide();
       if (e.key === 'ArrowRight') handleNextSlide();
@@ -121,7 +133,10 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
             <div className="p-6 sm:p-8 bg-stone-50/80 border-b md:border-b-0 md:border-r border-stone-200 flex flex-col justify-between">
               <div>
                 {/* Main High-Res Image Viewport with Slider Controls */}
-                <div className="relative aspect-[4/3] w-full bg-stone-200/50 rounded-xs overflow-hidden mb-4 border border-stone-200/60 shadow-2xs group select-none">
+                <div className="relative aspect-[4/3] w-full bg-stone-200/50 rounded-xs overflow-hidden mb-4 border border-stone-200/60 shadow-2xs group select-none"
+                  onMouseEnter={() => setIsGalleryPaused(true)}
+                  onMouseLeave={() => setIsGalleryPaused(false)}
+                >
                   <img
                     src={activeImage}
                     alt={`${product.name} - perspective ${currentIndex + 1}`}

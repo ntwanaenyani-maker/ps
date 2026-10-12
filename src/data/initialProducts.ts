@@ -40,7 +40,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     originalPrice: 249.0,
     currency: 'ZAR',
     image: faceCreamImg,
-    additionalImages: [faceCreamImg],
+    additionalImages: [
+      '/images/product_face_cream_1790846862559.jpg',
+      '/images/product_puso_glow_face_cream_alt1.jpg',
+    ],
     description:
       'A deeply restorative daily moisturizing cream crafted with raw African Marula oil, wild Mongongo butter, and cold-pressed botanical hydrators. Delivers intense barrier nourishment and locks in dewy luminosity without feeling heavy.',
     bodyHtml:
@@ -314,7 +317,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     originalPrice: 105.0,
     currency: 'ZAR',
     image: fofaScrubImg,
-    additionalImages: [fofaScrubImg],
+    additionalImages: [
+      '/images/wellness_fofa_scrub_1790763824821.jpg',
+      '/images/product_fofa_scrub_alt1.jpg',
+    ],
     description:
       'Rejuvenate dull skin with an exfoliating scrub designed to unclog pores, smooth rough texture, and promote a radiant skin tone.',
     bodyHtml:
@@ -352,7 +358,11 @@ export const INITIAL_PRODUCTS: Product[] = [
     originalPrice: 140.0,
     currency: 'ZAR',
     image: collagenImg,
-    additionalImages: [collagenImg],
+    additionalImages: [
+      '/images/wellness_collagen_powder_1790763792825.jpg',
+      '/images/product_collagen_peptides_alt1.jpg',
+      '/images/product_collagen_peptides_alt2.jpg',
+    ],
     description:
       'Nourish your body from within with pure collagen peptides formulated to support skin elasticity, hair growth, nail strength, and flexible joints.',
     bodyHtml:
@@ -428,7 +438,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     originalPrice: 55.0,
     currency: 'ZAR',
     image: chiaSeedsImg,
-    additionalImages: [chiaSeedsImg],
+    additionalImages: [
+      '/images/wellness_chia_seeds_1790763781382.jpg',
+      '/images/product_chia_seeds_alt1.jpg',
+    ],
     description:
       'Boost your daily nutrition with pure, premium chia seeds packed with essential Omega-3 fatty acids, protein, and dietary fibre for energy and digestion.',
     bodyHtml:

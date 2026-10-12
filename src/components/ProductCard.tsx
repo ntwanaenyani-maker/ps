@@ -22,6 +22,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const [isAddedRecently, setIsAddedRecently] = React.useState(false);
   const [currentImgIndex, setCurrentImgIndex] = React.useState(0);
+  const [isPaused, setIsPaused] = React.useState(false);
 
   const images = React.useMemo(() => {
     const list: string[] = [];
@@ -37,6 +38,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   }, [product.image, product.additionalImages]);
 
   const activeImage = images[currentImgIndex] || product.image;
+
+  React.useEffect(() => {
+    setCurrentImgIndex(0);
+  }, [product.id]);
+
+  React.useEffect(() => {
+    if (images.length <= 1 || isPaused) return;
+    const timer = window.setInterval(() => {
+      setCurrentImgIndex((prev) => (prev + 1) % images.length);
+    }, 3500);
+    return () => window.clearInterval(timer);
+  }, [images.length, isPaused]);
 
   const handlePrevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -66,6 +79,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <article
       onClick={() => onQuickView(product)}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
       className="product-card-root group relative flex flex-col bg-white border border-stone-200/80 rounded-xs overflow-hidden cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:shadow-xl hover:border-emerald-800/30 hover:-translate-y-1"
     >
       {/* Product Image Stage (65-75% visual dominance) with Slider */}
