@@ -1169,9 +1169,11 @@ app.post(
         });
         const vd = await vr.json().catch(() => ({}));
         if (vd.verification_status !== 'SUCCESS') {
+          console.warn('[paypal webhook] signature rejected:', vd.verification_status, event.event_type);
           return res.status(400).json({ error: 'Invalid webhook signature' });
         }
       } catch (err) {
+        console.warn('[paypal webhook] verification error:', err.message, event.event_type);
         return res.status(400).json({ error: 'Webhook verification failed' });
       }
     }
