@@ -5,17 +5,17 @@ import { Product, Review, Order, UserAccount, StoreSettings, AdminAnalytics } fr
 // storefront and the API can reference the same stable, un-hashed paths.
 export const brandLogoImg = '/images/phethagatsa_solutions_logo_1790843735832.jpg';
 export const heroRadiantModelImg = '/images/hero_radiant_model_1790846849702.jpg';
-export const faceCreamImg = '/images/product_face_cream_1790846862559.jpg';
+export const faceCreamImg = '/images/product_puso_glow_face_cream.jpg';
 export const radiantSerumImg = '/images/product_radiant_serum_1790846873117.jpg';
 export const cleanserImg = '/images/product_face_cleanser_1790846885678.jpg';
 export const tonerImg = '/images/product_brightening_toner_1790846896810.jpg';
 export const motherChildEczemaImg = '/images/mother_child_eczema_1790843745243.jpg';
 export const eczemaBalmImg = '/images/eczema_soothing_balm_1790843756444.jpg';
-export const chiaSeedsImg = '/images/wellness_chia_seeds_1790763781382.jpg';
-export const collagenImg = '/images/wellness_collagen_powder_1790763792825.jpg';
+export const chiaSeedsImg = '/images/product_chia_seeds.jpg';
+export const collagenImg = '/images/product_collagen_peptides.jpg';
 export const thighCreamImg = '/images/wellness_thigh_cream_1790763805596.jpg';
 export const pulaComboImg = '/images/wellness_pula_combo_1790763815812.jpg';
-export const fofaScrubImg = '/images/wellness_fofa_scrub_1790763824821.jpg';
+export const fofaScrubImg = '/images/product_fofa_scrub.jpg';
 export const skinGummiesImg = '/images/wellness_skin_gummies_1790763835715.jpg';
 
 export const BRAND_LOGO_IMAGE = brandLogoImg;
