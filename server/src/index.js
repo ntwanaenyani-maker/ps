@@ -728,10 +728,15 @@ app.post(
     if (!paypalConfigured()) {
       return res.status(503).json({ error: 'Card / PayPal payments are not configured yet.' });
     }
-    const { amount, currency = 'ZAR', orderNumber } = req.body || {};
+    const { amount, orderNumber } = req.body || {};
     if (!(Number(amount) > 0)) {
       return res.status(400).json({ error: 'A positive amount is required' });
     }
+    // Store prices are in ZAR, but PayPal does not support ZAR. Settle in a
+    // supported currency (default USD) using a configurable conversion rate.
+    const settleCurrency = (process.env.PAYPAL_SETTLE_CURRENCY || 'USD').toUpperCase();
+    const zarPerUsd = Number(process.env.PAYPAL_ZAR_PER_USD) || 18.5;
+    const chargeValue = Math.max(0.01, Math.round((Number(amount) / zarPerUsd) * 100) / 100);
     const token = await paypalAccessToken();
     const r = await fetchWithTimeout(`${PAYPAL_BASE}/v2/checkout/orders`, {
       method: 'POST',
@@ -742,7 +747,7 @@ app.post(
           {
             reference_id: orderNumber || undefined,
             description: orderNumber ? `Phethagatsa order ${orderNumber}` : 'Phethagatsa order',
-            amount: { currency_code: String(currency).toUpperCase(), value: Number(amount).toFixed(2) },
+            amount: { currency_code: settleCurrency, value: chargeValue.toFixed(2) },
           },
         ],
       }),
@@ -751,7 +756,7 @@ app.post(
     if (!r.ok || !data.id) {
       return res.status(502).json({ error: data.message || 'Could not start PayPal checkout' });
     }
-    res.json({ id: data.id });
+    res.json({ id: data.id, currency: settleCurrency, value: chargeValue });
   })
 );
 

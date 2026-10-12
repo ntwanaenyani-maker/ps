@@ -23,6 +23,11 @@ services:
         sync: false
       - key: PAYPAL_ENV
         value: sandbox
+      # PayPal cannot settle ZAR; charge the USD equivalent at this rate.
+      - key: PAYPAL_SETTLE_CURRENCY
+        value: USD
+      - key: PAYPAL_ZAR_PER_USD
+        value: "18.5"
       # Stitch (Pay by Bank) credentials (client token, client_paymentrequest scope).
       - key: STITCH_CLIENT_ID
         sync: false
@@ -72,3 +77,5 @@ services:
       # PayPal public client ID (renders the Card & PayPal buttons).
       - key: VITE_PAYPAL_CLIENT_ID
         sync: false
+      - key: VITE_PAYPAL_CURRENCY
+        value: USD
