@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { User, Session, Product, Order, Settings, Analytics } from './models.js';
+import { User, Session, Product, Order, Settings, Analytics, VerificationCode } from './models.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
@@ -26,6 +26,7 @@ const memory = {
   orders: [],
   settings: null,
   analytics: null,
+  codes: [],
 };
 
 export function getMode() {
@@ -103,6 +104,7 @@ function resetMemory() {
   memory.orders = [];
   memory.settings = { ...SEED_SETTINGS };
   memory.analytics = { ...SEED_ANALYTICS };
+  memory.codes = [];
 }
 
 // ---- users --------------------------------------------------------------------
@@ -157,6 +159,38 @@ export const sessions = {
       return;
     }
     memory.sessions = memory.sessions.filter((s) => s.token !== token);
+  },
+};
+
+// ---- verification codes (email OTP) -------------------------------------------
+export const codes = {
+  async create(doc) {
+    if (mode === 'mongodb') return VerificationCode.create(doc);
+    const row = { ...doc, createdAt: new Date().toISOString() };
+    memory.codes.push(row);
+    return row;
+  },
+  async findLatest(email, purpose) {
+    if (mode === 'mongodb') {
+      return VerificationCode.findOne({ email, purpose, consumed: false }).sort({ createdAt: -1 }).lean();
+    }
+    const matches = memory.codes.filter((c) => c.email === email && c.purpose === purpose && !c.consumed);
+    return matches.length ? matches[matches.length - 1] : null;
+  },
+  async update(id, patch) {
+    if (mode === 'mongodb') return VerificationCode.findOneAndUpdate({ id }, { $set: patch }, { new: true });
+    const c = memory.codes.find((x) => x.id === id);
+    if (c) Object.assign(c, patch);
+    return c || null;
+  },
+  async invalidate(email, purpose) {
+    if (mode === 'mongodb') {
+      await VerificationCode.updateMany({ email, purpose, consumed: false }, { $set: { consumed: true } });
+      return;
+    }
+    memory.codes.forEach((c) => {
+      if (c.email === email && c.purpose === purpose) c.consumed = true;
+    });
   },
 };
 

@@ -130,12 +130,26 @@ const AnalyticsSchema = new Schema(
   { collection: 'analytics', timestamps: true }
 );
 
+const VerificationCodeSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    email: { type: String, required: true, lowercase: true, index: true },
+    purpose: { type: String, required: true },
+    codeHash: { type: String, required: true },
+    attempts: { type: Number, default: 0 },
+    consumed: { type: Boolean, default: false },
+    expiresAt: { type: Date, required: true },
+  },
+  { collection: 'verification_codes', timestamps: { createdAt: true, updatedAt: false } }
+);
+
 export const User = mongoose.model('User', UserSchema);
 export const Session = mongoose.model('Session', SessionSchema);
 export const Product = mongoose.model('Product', ProductSchema);
 export const Order = mongoose.model('Order', OrderSchema);
 export const Settings = mongoose.model('Settings', SettingsSchema);
 export const Analytics = mongoose.model('Analytics', AnalyticsSchema);
+export const VerificationCode = mongoose.model('VerificationCode', VerificationCodeSchema);
 
 export function toPublicUser(user) {
   if (!user) return null;

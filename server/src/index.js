@@ -6,6 +6,7 @@ import {
   getMode,
   users,
   sessions,
+  codes,
   products,
   orders,
   settings,
@@ -15,6 +16,14 @@ import {
   generateToken,
 } from './store.js';
 import { toPublicUser, mapOrder } from './models.js';
+import {
+  emailConfigured,
+  sendEmail,
+  orderConfirmationEmail,
+  orderAdminEmail,
+  orderPaidEmail,
+  otpEmail,
+} from './email.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -206,6 +215,56 @@ mutation Simulate($paymentRequestId: ID!) {
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+// ---- email + OTP helpers ------------------------------------------------------
+function adminEmail() {
+  return process.env.ADMIN_EMAIL || process.env.BREVO_SENDER_EMAIL || 'support@phethagatsa.co.za';
+}
+
+// Fire-and-forget so a mail failure never breaks an API response.
+function sendSafe(promise) {
+  Promise.resolve(promise).catch((err) => console.warn('[email]', err.message));
+}
+
+async function sendOrderConfirmation(order) {
+  if (!emailConfigured() || !order?.customer?.email) return;
+  await Promise.allSettled([
+    sendEmail({ to: order.customer.email, ...orderConfirmationEmail(order) }),
+    sendEmail({ to: adminEmail(), ...orderAdminEmail(order), replyTo: order.customer.email }),
+  ]);
+}
+
+async function sendOrderPaid(order) {
+  if (!emailConfigured() || !order?.customer?.email) return;
+  await sendEmail({ to: order.customer.email, ...orderPaidEmail(order) });
+}
+
+function generateOtp() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+
+function hashOtp(code) {
+  return crypto.createHash('sha256').update(`${code}:${process.env.OTP_SECRET || 'phethagatsa-otp'}`).digest('hex');
+}
+
+const OTP_PURPOSES = new Set(['reset_password', 'verify_email']);
+
+async function verifyOtp(email, purpose, code) {
+  const record = await codes.findLatest(email, purpose);
+  if (!record) return { ok: false, error: 'Invalid or expired code' };
+  if (record.consumed) return { ok: false, error: 'Invalid or expired code' };
+  if (new Date(record.expiresAt).getTime() < Date.now()) return { ok: false, error: 'Code has expired' };
+  if ((record.attempts ?? 0) >= 5) {
+    await codes.update(record.id, { consumed: true });
+    return { ok: false, error: 'Too many attempts. Please request a new code.' };
+  }
+  if (record.codeHash !== hashOtp(String(code || '').trim())) {
+    await codes.update(record.id, { attempts: (record.attempts ?? 0) + 1 });
+    return { ok: false, error: 'Incorrect code' };
+  }
+  await codes.update(record.id, { consumed: true });
+  return { ok: true };
+}
+
 // ---- health -------------------------------------------------------------------
 app.get(
   '/api/health',
@@ -356,6 +415,86 @@ authRouter.post(
     await sessions.create({ token, userId: user.id, expiresAt });
     setSessionCookie(res, token, expiresAt);
     res.json({ user: toPublicUser(user), token });
+  })
+);
+
+// Send a one-time code by email (password reset / email verification).
+authRouter.post(
+  '/otp/request',
+  wrap(async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const purpose = String(req.body?.purpose || 'reset_password');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+    if (!OTP_PURPOSES.has(purpose)) {
+      return res.status(400).json({ error: 'Unsupported verification purpose' });
+    }
+    if (!emailConfigured() && process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'Email is not configured yet. Please contact support.' });
+    }
+
+    const user = await users.findByEmail(email);
+    // Do not leak whether an account exists. Respond generically when absent.
+    if (!user) return res.json({ ok: true, sent: true });
+
+    const existing = await codes.findLatest(email, purpose);
+    if (existing && Date.now() - new Date(existing.createdAt || 0).getTime() < 60000) {
+      return res.status(429).json({ error: 'Please wait a moment before requesting another code.' });
+    }
+    await codes.invalidate(email, purpose);
+
+    const code = generateOtp();
+    await codes.create({
+      id: `otp-${crypto.randomUUID()}`,
+      email,
+      purpose,
+      codeHash: hashOtp(code),
+      attempts: 0,
+      consumed: false,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+    if (emailConfigured()) {
+      sendSafe(sendEmail({ to: email, ...otpEmail(code, purpose) }));
+      return res.json({ ok: true, sent: true });
+    }
+    // Dev fallback: no mailer configured, surface the code so the flow is testable.
+    console.warn('[otp] email not configured - returning code for', email, '(dev only)');
+    return res.json({ ok: true, sent: false, devCode: code });
+  })
+);
+
+authRouter.post(
+  '/otp/verify',
+  wrap(async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const purpose = String(req.body?.purpose || 'verify_email');
+    const code = String(req.body?.code || '').trim();
+    if (!email || !code) return res.status(400).json({ error: 'Email and code are required' });
+    const result = await verifyOtp(email, purpose, code);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ ok: true, verified: true });
+  })
+);
+
+authRouter.post(
+  '/password/reset',
+  wrap(async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const code = String(req.body?.code || '').trim();
+    const newPassword = String(req.body?.newPassword || '');
+    if (!email || !code) return res.status(400).json({ error: 'Email and code are required' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    const user = await users.findByEmail(email);
+    if (!user) return res.status(400).json({ error: 'Invalid or expired code' });
+
+    const result = await verifyOtp(email, 'reset_password', code);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+
+    await users.update(user.id, { passwordHash: hashPassword(newPassword) });
+    // Invalidate all existing sessions for safety.
+    res.json({ ok: true, reset: true });
   })
 );
 
@@ -510,7 +649,9 @@ app.post(
       });
     }
 
-    res.status(201).json({ order: mapOrder(created) });
+    const mapped = mapOrder(created);
+    sendSafe(sendOrderConfirmation(mapped));
+    res.status(201).json({ order: mapped });
   })
 );
 
@@ -633,12 +774,13 @@ app.post(
     }
     const completed = data.status === 'COMPLETED';
     if (completed && orderNumber) {
-      await orders.update(String(orderNumber).toUpperCase(), {
+      const updated = await orders.update(String(orderNumber).toUpperCase(), {
         paymentStatus: 'paid',
         status: 'confirmed',
         paypalOrderId: data.id || orderId,
         paidAt: new Date(),
       });
+      if (updated) sendSafe(sendOrderPaid(mapOrder(updated)));
     }
     res.json({ status: data.status, id: data.id || orderId, captured: completed });
   })
@@ -726,12 +868,13 @@ app.post(
     const state = data?.node?.state?.__typename || 'Unknown';
     const completed = state === 'PaymentInitiationRequestCompleted';
     if (completed && orderNumber) {
-      await orders.update(String(orderNumber).toUpperCase(), {
+      const updated = await orders.update(String(orderNumber).toUpperCase(), {
         paymentStatus: 'paid',
         status: 'confirmed',
         stitchRequestId: paymentRequestId,
         paidAt: new Date(),
       });
+      if (updated) sendSafe(sendOrderPaid(mapOrder(updated)));
     }
     res.json({ state, completed, orderNumber: orderNumber || null });
   })
@@ -812,6 +955,23 @@ app.get('/api/admin/secure-access', (req, res) => {
   if (!requireAdmin(req, res)) return;
   res.json({ success: true, message: 'Admin access granted' });
 });
+
+// Send a test transactional email via Brevo (admin only).
+app.post(
+  '/api/email/test',
+  wrap(async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    if (!emailConfigured()) return res.status(503).json({ error: 'Email is not configured' });
+    const to = String(req.body?.to || adminEmail());
+    const result = await sendEmail({
+      to,
+      subject: 'Phethagatsa email test',
+      html: '<p>This is a test email from Phethagatsa Solutions. Brevo integration is working.</p>',
+      text: 'This is a test email from Phethagatsa Solutions. Brevo integration is working.',
+    });
+    res.json({ ok: true, messageId: result.messageId || null });
+  })
+);
 
 app.use((req, res) => res.status(404).json({ success: false, error: 'Not found' }));
 app.use((err, _req, res, _next) => {

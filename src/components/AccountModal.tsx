@@ -37,11 +37,18 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   onViewOrder,
 }) => {
   const [activeTab, setActiveTab] = useState<'wishlist' | 'orders' | 'profile'>('wishlist');
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'reset'>('login');
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+
+  // Password reset (email OTP) state
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetOtpSent, setResetOtpSent] = useState(false);
+  const [resetNotice, setResetNotice] = useState('');
 
   // Register form state
   const [registerName, setRegisterName] = useState('');
@@ -50,6 +57,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const [registerConfirm, setRegisterConfirm] = useState('');
 
   const [authError, setAuthError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -93,6 +101,48 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       onLogin(user);
     } catch (error: any) {
       setAuthError(error.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRequestResetOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setResetNotice('');
+    setIsSubmitting(true);
+    try {
+      await apiService.requestOtp(resetEmail.trim(), 'reset_password');
+      setResetOtpSent(true);
+      setResetNotice('If an account exists for that email, a 6-digit code has been sent. Check your inbox and spam folder.');
+    } catch (error: any) {
+      setAuthError(error.message || 'Could not send the code. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    if (resetPassword.length < 6) {
+      setAuthError('Password must be at least 6 characters');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await apiService.resetPassword(resetEmail.trim(), resetCode.trim(), resetPassword);
+      setResetNotice('');
+      setAuthError('');
+      setAuthNotice('Password updated. Please sign in with your new password.');
+      setAuthMode('login');
+      setLoginEmail(resetEmail.trim());
+      setLoginPassword('');
+      setResetCode('');
+      setResetPassword('');
+      setResetOtpSent(false);
+    } catch (error: any) {
+      setAuthError(error.message || 'Could not reset your password. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -338,6 +388,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 onClick={() => {
                   setAuthMode('login');
                   setAuthError('');
+                  setAuthNotice('');
                 }}
                 className={`px-4 py-2 rounded-xs transition-colors cursor-pointer ${
                   authMode === 'login' ? 'bg-stone-900 text-white font-semibold' : 'text-stone-600 hover:text-stone-950'
@@ -349,6 +400,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 onClick={() => {
                   setAuthMode('register');
                   setAuthError('');
+                  setAuthNotice('');
                 }}
                 className={`px-4 py-2 rounded-xs transition-colors cursor-pointer ${
                   authMode === 'register' ? 'bg-stone-900 text-white font-semibold' : 'text-stone-600 hover:text-stone-950'
@@ -362,8 +414,11 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               {authError && (
                 <div className="mx-8 mt-6 p-3 bg-rose-50 border border-rose-200 rounded-xs text-rose-700 text-xs">{authError}</div>
               )}
+              {authNotice && (
+                <div className="mx-8 mt-6 p-3 bg-emerald-50 border border-emerald-200 rounded-xs text-emerald-800 text-xs">{authNotice}</div>
+              )}
 
-              {GOOGLE_CLIENT_ID && (
+              {GOOGLE_CLIENT_ID && authMode !== 'reset' && (
                 <div className="mx-8 mt-6">
                   <GoogleSignInButton
                     clientId={GOOGLE_CLIENT_ID}
@@ -427,6 +482,20 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                         <ArrowRight className="w-4 h-4" /> Sign In
                       </>
                     )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('reset');
+                      setAuthError('');
+                      setAuthNotice('');
+                      setResetEmail(loginEmail.trim() || resetEmail);
+                      setResetOtpSent(false);
+                    }}
+                    className="w-full text-center text-[11px] font-mono text-stone-500 hover:text-stone-900 underline underline-offset-2 pt-1 cursor-pointer"
+                  >
+                    Forgot password?
                   </button>
 
                   <p className="text-[10px] text-stone-400 font-mono text-center pt-2 flex items-center justify-center gap-1.5">
@@ -511,6 +580,115 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                         <User className="w-4 h-4" /> Create Account
                       </>
                     )}
+                  </button>
+                </form>
+              )}
+
+              {/* Password Reset Form */}
+              {authMode === 'reset' && (
+                <form
+                  onSubmit={resetOtpSent ? handleResetPassword : handleRequestResetOtp}
+                  className="p-8 max-w-md mx-auto my-auto w-full space-y-3.5 text-xs"
+                >
+                  <div className="text-center mb-4">
+                    <h3 className="text-lg font-bold text-stone-950 font-serif">Reset Your Password</h3>
+                    <p className="text-xs text-stone-500 font-mono mt-1">
+                      {resetOtpSent
+                        ? 'Enter the 6-digit code we emailed you and choose a new password.'
+                        : 'Enter your account email and we will send you a reset code.'}
+                    </p>
+                  </div>
+
+                  {resetNotice && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xs text-emerald-800 text-[11px]">
+                      {resetNotice}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      disabled={resetOtpSent}
+                      className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900 disabled:bg-stone-100 disabled:text-stone-500"
+                    />
+                  </div>
+
+                  {resetOtpSent && (
+                    <>
+                      <div>
+                        <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">Reset Code</label>
+                        <input
+                          type="text"
+                          required
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={resetCode}
+                          onChange={(e) => setResetCode(e.target.value.replace(/\D/g, ''))}
+                          placeholder="6-digit code"
+                          autoComplete="one-time-code"
+                          className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 tracking-[0.4em] text-center font-mono focus:outline-none focus:border-stone-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-mono uppercase text-stone-600 mb-1">New Password</label>
+                        <input
+                          type="password"
+                          required
+                          minLength={6}
+                          value={resetPassword}
+                          onChange={(e) => setResetPassword(e.target.value)}
+                          placeholder="At least 6 characters"
+                          autoComplete="new-password"
+                          className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-stone-900 focus:outline-none focus:border-stone-900"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-3 bg-stone-950 hover:bg-stone-800 text-white font-mono uppercase tracking-wider text-xs font-medium rounded-xs transition-colors cursor-pointer mt-4 flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> {resetOtpSent ? 'Updating…' : 'Sending…'}
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight className="w-4 h-4" /> {resetOtpSent ? 'Update Password' : 'Send Reset Code'}
+                      </>
+                    )}
+                  </button>
+
+                  {resetOtpSent && (
+                    <button
+                      type="button"
+                      onClick={handleRequestResetOtp}
+                      disabled={isSubmitting}
+                      className="w-full text-center text-[11px] font-mono text-stone-500 hover:text-stone-900 underline underline-offset-2 cursor-pointer disabled:opacity-60"
+                    >
+                      Didn't get it? Resend code
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('login');
+                      setAuthError('');
+                      setAuthNotice('');
+                    }}
+                    className="w-full text-center text-[11px] font-mono text-stone-500 hover:text-stone-900 underline underline-offset-2 cursor-pointer"
+                  >
+                    Back to sign in
                   </button>
                 </form>
               )}

@@ -33,6 +33,19 @@ services:
       # Allowlisted Stitch redirect target (defaults to CORS_ORIGIN + /?stitch=return).
       - key: STITCH_REDIRECT_URI
         sync: false
+      # Brevo transactional email (order receipts + password-reset OTP codes).
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: Phethagatsa Solutions
+      # Where new-order notifications are sent (defaults to BREVO_SENDER_EMAIL).
+      - key: ADMIN_EMAIL
+        sync: false
+      # Secret used to hash one-time codes.
+      - key: OTP_SECRET
+        sync: false
       # Google OAuth web client ID (verifies ID tokens at /api/auth/google).
       - key: GOOGLE_CLIENT_ID
         sync: false

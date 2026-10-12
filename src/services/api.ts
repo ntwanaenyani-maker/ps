@@ -148,6 +148,32 @@ export const apiService = {
     }
   },
 
+  // ---- PASSWORD RESET (email OTP) ----
+  async requestOtp(email: string, purpose: 'reset_password' | 'verify_email' = 'reset_password'): Promise<void> {
+    await request('/api/auth/otp/request', {
+      method: 'POST',
+      body: JSON.stringify({ email, purpose }),
+    });
+  },
+
+  async verifyOtp(
+    email: string,
+    code: string,
+    purpose: 'reset_password' | 'verify_email' = 'reset_password'
+  ): Promise<{ verified: boolean }> {
+    return request('/api/auth/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, purpose }),
+    });
+  },
+
+  async resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+    await request('/api/auth/password/reset', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, newPassword }),
+    });
+  },
+
   // ---- PRODUCTS ----
   async getProducts(): Promise<Product[]> {
     const data = await request<{ products: Product[] }>('/api/products');
