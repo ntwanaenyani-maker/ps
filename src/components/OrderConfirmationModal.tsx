@@ -4,20 +4,18 @@ import { formatPrice } from '../utils/formatters';
 import { PayInstructions } from './PayInstructions';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 import { STORE_WHATSAPP_NUMBER, STORE_WHATSAPP_DISPLAY, getOfflineEftWhatsAppUrl } from '../lib/whatsapp';
-import { CheckCircle, Copy, Check, Clock, MapPin, ExternalLink, MessageCircle, Send } from 'lucide-react';
+import { CheckCircle, Copy, Check, Clock, MapPin, MessageCircle } from 'lucide-react';
 
 interface OrderConfirmationModalProps {
   order: Order | null;
   currency: Currency;
   onClose: () => void;
-  onOpenDatabase: () => void;
 }
 
 export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   order,
   currency,
   onClose,
-  onOpenDatabase,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -65,13 +63,13 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             </div>
           </div>
           <div className="text-xs font-mono uppercase tracking-widest text-emerald-800 font-semibold mb-1">
-            Persisted In Free Database
+            Order Received
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-950 font-serif">
             Order #{order.id} Confirmed
           </h2>
           <p className="mt-2 text-xs sm:text-sm text-stone-600 max-w-md mx-auto">
-            Siyabonga / Ke a leboga, {order.customer.fullName}. Your order manifest has been committed to the live database and our Johannesburg atelier is preparing courier dispatch.
+            Siyabonga / Ke a leboga, {order.customer.fullName}. We have received your order and our Johannesburg atelier is preparing courier dispatch.
           </p>
 
           {/* Copy Order ID Chip */}
@@ -147,7 +145,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                 <span>Financial Settlement</span>
               </div>
               <p className="text-stone-600 text-[11px] leading-relaxed">
-                Payment Type: <span className="uppercase font-mono font-medium text-stone-900">{order.paymentMethod === 'wire' || order.paymentMethod === 'instant-eft' ? 'EFT Bank Transfer' : order.paymentMethod.toUpperCase()}</span><br />
+                Payment Type: <span className="uppercase font-mono font-medium text-stone-900">{order.paymentMethod === 'wire' || order.paymentMethod === 'instant-eft' ? 'EFT Bank Transfer' : order.paymentMethod === 'paypal' ? 'Card / PayPal' : order.paymentMethod.toUpperCase()}</span><br />
                 Amount: <span className="font-mono font-semibold text-stone-950">{formatPrice(order.total, currency)}</span><br />
                 Courier Insurance: Covered<br />
                 Date: {order.createdAt}
@@ -194,14 +192,6 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </a>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={onOpenDatabase}
-              className="px-3 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-mono font-medium rounded-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Inspect Database</span>
-            </button>
-
             <button
               onClick={onClose}
               className="px-5 py-2.5 bg-stone-950 hover:bg-stone-850 text-white text-xs font-medium uppercase tracking-wider rounded-xs transition-colors cursor-pointer"

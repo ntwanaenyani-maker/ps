@@ -93,6 +93,8 @@ const OrderSchema = new Schema(
     paymentMethod: { type: String, default: 'wire' },
     paymentStatus: { type: String, default: 'pending' },
     paystackReference: String,
+    paypalOrderId: { type: String, default: null },
+    paidAt: { type: Date, default: null },
     status: { type: String, default: 'pending' },
     notes: { type: String, default: null },
   },

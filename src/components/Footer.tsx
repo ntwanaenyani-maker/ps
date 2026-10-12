@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
-import { Database, ArrowRight, Check, MessageCircle, Download } from 'lucide-react';
+import { ArrowRight, Check, MessageCircle, Mail, Phone, MapPin } from 'lucide-react';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
+import { PolicyKind } from './PolicyModal';
 
 interface FooterProps {
-  onOpenDatabase: () => void;
   onOpenOrderLookup: () => void;
-  onOpenStarterDownload?: () => void;
+  onOpenPolicy: (policy: PolicyKind) => void;
   onSelectCategory: (cat: string) => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
-  onOpenDatabase,
   onOpenOrderLookup,
-  onOpenStarterDownload,
+  onOpenPolicy,
   onSelectCategory,
 }) => {
   const [email, setEmail] = useState('');
@@ -52,12 +51,28 @@ export const Footer: React.FC<FooterProps> = ({
               </div>
             </div>
             <p className="text-xs text-stone-300 font-sans leading-relaxed max-w-sm">
-              Modern African skincare, pediatrician-tested eczema relief balms, targeted hyperpigmentation treatments, pure collagen peptides, and organic superfoods crafted with botanical integrity.
+              Modern African skincare, pediatrician-tested eczema relief balms, targeted
+              hyperpigmentation treatments, pure collagen peptides, and organic superfoods crafted
+              with botanical integrity.
             </p>
-            <div className="pt-2 text-xs font-mono text-stone-400 space-y-1">
-              <div>PHETHAGATSA SOLUTIONS: Bronkhostspruit -Witbank -Rustenburg</div>
-              <div>Contacymts care@phethagats.ck.za - Tel +27 (0)82 956 4472</div>
-            </div>
+            <ul className="pt-2 text-xs font-mono text-stone-400 space-y-1.5">
+              <li className="flex items-center gap-2">
+                <MapPin className="w-3.5 h-3.5 text-stone-500" />
+                <span>Bronkhorstspruit · Witbank · Rustenburg</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <Mail className="w-3.5 h-3.5 text-stone-500" />
+                <a href="mailto:support@phethagatsa.co.za" className="hover:text-white transition-colors">
+                  support@phethagatsa.co.za
+                </a>
+              </li>
+              <li className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-stone-500" />
+                <a href="tel:+27723819402" className="hover:text-white transition-colors">
+                  +27 (0)72 381 9402
+                </a>
+              </li>
+            </ul>
           </div>
 
           {/* Catalog Categories (1 col) */}
@@ -79,7 +94,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={() => onSelectCategory('skincare')}
                   className="hover:text-white transition-colors cursor-pointer text-left"
                 >
-                  Dark Thigh Cream
+                  Skincare & Body
                 </button>
               </li>
               <li>
@@ -87,7 +102,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={() => onSelectCategory('skincare-kits')}
                   className="hover:text-white transition-colors cursor-pointer text-left"
                 >
-                  Pigmentation Corrector Set
+                  Pigmentation Transformation Sets
                 </button>
               </li>
               <li>
@@ -125,10 +140,10 @@ export const Footer: React.FC<FooterProps> = ({
             </ul>
           </div>
 
-          {/* Concierge & Orders (1 col) */}
+          {/* Customer Care (1 col) */}
           <div>
             <h4 className="text-xs font-mono uppercase tracking-widest text-white mb-3 font-semibold">
-              Concierge
+              Customer Care
             </h4>
             <ul className="space-y-2 text-xs font-mono text-stone-400">
               <li>
@@ -136,7 +151,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={onOpenOrderLookup}
                   className="hover:text-white transition-colors cursor-pointer text-left underline"
                 >
-                  Track Consignment
+                  Track Your Order
                 </button>
               </li>
               <li>
@@ -152,24 +167,28 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <button
-                  onClick={onOpenDatabase}
-                  className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1.5"
+                  onClick={() => onOpenPolicy('returns')}
+                  className="hover:text-white transition-colors cursor-pointer text-left"
                 >
-                  <Database className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Free Database Hub</span>
+                  Returns & Refunds
                 </button>
               </li>
-              {onOpenStarterDownload && (
-                <li>
-                  <button
-                    onClick={onOpenStarterDownload}
-                    className="hover:text-amber-300 text-amber-400 font-medium transition-colors cursor-pointer text-left flex items-center gap-1.5"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download Web App Starter</span>
-                  </button>
-                </li>
-              )}
+              <li>
+                <button
+                  onClick={() => onOpenPolicy('privacy')}
+                  className="hover:text-white transition-colors cursor-pointer text-left"
+                >
+                  Privacy Policy
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onOpenPolicy('terms')}
+                  className="hover:text-white transition-colors cursor-pointer text-left"
+                >
+                  Terms & Conditions
+                </button>
+              </li>
               <li>
                 <button
                   onClick={() => {
@@ -178,14 +197,8 @@ export const Footer: React.FC<FooterProps> = ({
                   }}
                   className="hover:text-white transition-colors cursor-pointer text-left"
                 >
-                  Shipping & Returns FAQ
+                  Shipping FAQ
                 </button>
-              </li>
-              <li>
-                <span className="text-stone-500">The Courier Guy Tracking</span>
-              </li>
-              <li>
-                <span className="text-stone-500">EFT Proof of Payment</span>
               </li>
             </ul>
           </div>
@@ -196,7 +209,7 @@ export const Footer: React.FC<FooterProps> = ({
               Drop Notifications
             </h4>
             <p className="text-[11px] text-stone-400 font-sans mb-3 leading-relaxed">
-              Receive private drop notifications 24 hours prior to limited edition releases.
+              Be first to hear about new arrivals, seasonal sets, and limited releases.
             </p>
 
             <form onSubmit={handleSubscribe} className="space-y-2">
@@ -206,7 +219,7 @@ export const Footer: React.FC<FooterProps> = ({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="collector@gmail.com"
+                  placeholder="you@example.com"
                   className="w-full bg-stone-900 border border-stone-800 rounded-xs px-3 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-stone-500 font-mono"
                 />
               </div>
@@ -217,11 +230,11 @@ export const Footer: React.FC<FooterProps> = ({
                 {subscribed ? (
                   <>
                     <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Inscribed for Drops</span>
+                    <span>You're Subscribed</span>
                   </>
                 ) : (
                   <>
-                    <span>Join Collector Roster</span>
+                    <span>Subscribe</span>
                     <ArrowRight className="w-3 h-3" />
                   </>
                 )}
@@ -230,25 +243,24 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
         </div>
 
-        {/* Bottom Bar: Free Database architecture badge & copyright */}
+        {/* Bottom Bar: legal links & copyright */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-stone-500">
-          <div className="flex items-center gap-2">
-            <span>© {new Date().getFullYear()} Phethagatsa Store (Pty) Ltd.</span>
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            <span>© {new Date().getFullYear()} Phethagatsa Solutions (Pty) Ltd.</span>
             <span aria-hidden="true">·</span>
             <span>All rights reserved</span>
-            <span aria-hidden="true">·</span>
-            <button
-              onClick={onOpenDatabase}
-              className="text-stone-400 hover:text-white underline cursor-pointer"
-            >
-              Free Database Engine Active
-            </button>
           </div>
 
-          <div className="flex items-center gap-4 text-[11px]">
-            <span className="text-stone-500">Maboneng, JHB</span>
-            <span className="text-stone-500">Terms of Craft</span>
-            <span className="text-stone-500">Zero Cloud Fees</span>
+          <div className="flex items-center gap-4 text-[11px] flex-wrap justify-center">
+            <button onClick={() => onOpenPolicy('privacy')} className="text-stone-400 hover:text-white cursor-pointer">
+              Privacy
+            </button>
+            <button onClick={() => onOpenPolicy('returns')} className="text-stone-400 hover:text-white cursor-pointer">
+              Returns
+            </button>
+            <button onClick={() => onOpenPolicy('terms')} className="text-stone-400 hover:text-white cursor-pointer">
+              Terms
+            </button>
           </div>
         </div>
       </div>

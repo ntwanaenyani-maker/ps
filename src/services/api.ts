@@ -177,6 +177,32 @@ export const apiService = {
     }
   },
 
+  // ---- PAYMENTS (PayPal Orders v2) ----
+  async paypalStatus(): Promise<{ paypalConfigured: boolean }> {
+    return request('/api/pay/paypal/status');
+  },
+
+  async createPayPalOrder(params: {
+    amount: number;
+    currency?: string;
+    orderNumber?: string;
+  }): Promise<{ id: string }> {
+    return request('/api/pay/paypal/create', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async capturePayPalOrder(params: {
+    orderId: string;
+    orderNumber?: string;
+  }): Promise<{ status: string; id: string; captured: boolean }> {
+    return request('/api/pay/paypal/capture', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
   // ---- PAYMENTS (Paystack-ready) ----
   async initializePayment(params: {
     email: string;

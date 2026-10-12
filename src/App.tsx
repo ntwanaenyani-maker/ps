@@ -12,16 +12,14 @@ import { SearchModal } from './components/SearchModal';
 import { CheckoutModal } from './components/CheckoutModal';
 import { OrderConfirmationModal } from './components/OrderConfirmationModal';
 import { OrderLookupModal } from './components/OrderLookupModal';
-import { DatabaseModal } from './components/DatabaseModal';
 import { CustomerAccountPortal } from './components/CustomerAccountPortal';
 import { WhatsAppBubble } from './components/WhatsAppBubble';
 import { CartBar } from './components/CartBar';
 import { StorySection } from './components/StorySection';
 import { FAQSection } from './components/FAQSection';
 import { Footer } from './components/Footer';
-import { StarterDownloadModal } from './components/StarterDownloadModal';
 import { AccountModal } from './components/AccountModal';
-import { Download } from 'lucide-react';
+import { PolicyModal, PolicyKind } from './components/PolicyModal';
 import { addRecentView } from './services/recentViews';
 
 export default function App() {
@@ -44,8 +42,7 @@ export default function App() {
   const [checkoutDiscount, setCheckoutDiscount] = useState(0);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [isOrderLookupOpen, setIsOrderLookupOpen] = useState(false);
-  const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
-  const [isStarterModalOpen, setIsStarterModalOpen] = useState(false);
+  const [policyModal, setPolicyModal] = useState<PolicyKind | null>(null);
 
   // Sync data with dbService and restore server session + catalog
   const loadState = useCallback(() => {
@@ -105,8 +102,7 @@ export default function App() {
         else if (isCheckoutOpen) setIsCheckoutOpen(false);
         else if (completedOrder) setCompletedOrder(null);
         else if (isOrderLookupOpen) setIsOrderLookupOpen(false);
-        else if (isDatabaseModalOpen) setIsDatabaseModalOpen(false);
-        else if (isStarterModalOpen) setIsStarterModalOpen(false);
+        else if (policyModal) setPolicyModal(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -120,8 +116,7 @@ export default function App() {
     isCheckoutOpen,
     completedOrder,
     isOrderLookupOpen,
-    isDatabaseModalOpen,
-    isStarterModalOpen,
+    policyModal,
   ]);
 
   const handleAddToCart = (product: Product, quantity = 1, variantId?: string) => {
@@ -225,27 +220,6 @@ export default function App() {
   // Main Storefront App
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 font-sans selection:bg-stone-900 selection:text-white flex flex-col">
-      {/* Top Dual-App Quick Switcher Bar (Simplified for Storefront Only) */}
-      <div className="bg-[#14221a] text-stone-200 text-xs py-1.5 px-4 flex items-center justify-between border-b border-emerald-900/40 font-mono">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-emerald-300 font-bold">Phethagatsa Solutions</span>
-          <span className="text-stone-500 hidden sm:inline">|</span>
-          <span className="text-stone-400 hidden sm:inline">Modern African Skincare</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsStarterModalOpen(true)}
-            className="px-2.5 py-1 rounded text-[11px] font-bold uppercase transition-all cursor-pointer bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-2xs"
-          >
-            <Download className="w-3 h-3" />
-            <span className="hidden sm:inline">Download Starter</span>
-            <span className="sm:hidden">Starter</span>
-          </button>
-        </div>
-      </div>
-
       {/* 3-Zone Header */}
       <Header
         cartCount={cartTotalItems}
@@ -257,7 +231,6 @@ export default function App() {
         onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenAccount={() => setIsAccountOpen(true)}
         onOpenSearch={() => setIsSearchOpen(true)}
-        onOpenDatabaseModal={() => setIsDatabaseModalOpen(true)}
         onOpenOrderLookup={() => setIsOrderLookupOpen(true)}
         onSelectCategory={(cat) => setSelectedCategory(cat as Category)}
       />
@@ -299,11 +272,10 @@ export default function App() {
         <FAQSection />
       </main>
 
-      {/* Footer with Database Info & Concierge */}
+      {/* Footer with Concierge & Policies */}
       <Footer
-        onOpenDatabase={() => setIsDatabaseModalOpen(true)}
         onOpenOrderLookup={() => setIsOrderLookupOpen(true)}
-        onOpenStarterDownload={() => setIsStarterModalOpen(true)}
+        onOpenPolicy={(policy) => setPolicyModal(policy)}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat as Category);
           handleScrollToGrid();
@@ -388,12 +360,6 @@ export default function App() {
         onRequireAccount={() => setIsAccountOpen(true)}
       />
 
-      {/* Starter Download Modal */}
-      <StarterDownloadModal
-        isOpen={isStarterModalOpen}
-        onClose={() => setIsStarterModalOpen(false)}
-      />
-
       {/* Search Modal */}
       <SearchModal
         isOpen={isSearchOpen}
@@ -423,7 +389,6 @@ export default function App() {
           order={completedOrder}
           currency={currency}
           onClose={() => setCompletedOrder(null)}
-          onOpenDatabase={() => setIsDatabaseModalOpen(true)}
         />
       )}
 
@@ -434,11 +399,8 @@ export default function App() {
         onClose={() => setIsOrderLookupOpen(false)}
       />
 
-      {/* Database Modal */}
-      <DatabaseModal
-        isOpen={isDatabaseModalOpen}
-        onClose={() => setIsDatabaseModalOpen(false)}
-      />
+      {/* Privacy, Returns & Terms Policy Modal */}
+      <PolicyModal kind={policyModal} onClose={() => setPolicyModal(null)} />
     </div>
   );
 };

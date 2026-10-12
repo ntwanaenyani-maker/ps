@@ -20,7 +20,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const SESSION_COOKIE = 'ps_session';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'phethagatsa-admin-2026-secure-key';
-const VALID_PAYMENT = new Set(['card', 'instant-eft', 'payfast', 'cod', 'wire', 'paystack']);
+const VALID_PAYMENT = new Set(['card', 'instant-eft', 'payfast', 'cod', 'wire', 'paystack', 'paypal']);
+const PAYPAL_BASE =
+  process.env.PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 
 app.use(express.json());
 
@@ -77,6 +79,37 @@ function requireAdmin(req, res) {
     return false;
   }
   return true;
+}
+
+// ---- PayPal (Orders v2) -------------------------------------------------------
+function paypalConfigured() {
+  return Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+}
+
+async function fetchWithTimeout(url, options = {}, ms = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function paypalAccessToken() {
+  const auth = Buffer.from(
+    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
+  ).toString('base64');
+  const res = await fetchWithTimeout(`${PAYPAL_BASE}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) {
+    throw new Error(data.error_description || 'PayPal authentication failed');
+  }
+  return data.access_token;
 }
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -451,6 +484,74 @@ app.post(
   })
 );
 
+// ---- payments (PayPal Orders v2) ----------------------------------------------
+app.get('/api/pay/paypal/status', (_req, res) => {
+  res.json({ paypalConfigured: paypalConfigured() });
+});
+
+app.post(
+  '/api/pay/paypal/create',
+  wrap(async (req, res) => {
+    if (!paypalConfigured()) {
+      return res.status(503).json({ error: 'Card / PayPal payments are not configured yet.' });
+    }
+    const { amount, currency = 'ZAR', orderNumber } = req.body || {};
+    if (!(Number(amount) > 0)) {
+      return res.status(400).json({ error: 'A positive amount is required' });
+    }
+    const token = await paypalAccessToken();
+    const r = await fetchWithTimeout(`${PAYPAL_BASE}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [
+          {
+            reference_id: orderNumber || undefined,
+            description: orderNumber ? `Phethagatsa order ${orderNumber}` : 'Phethagatsa order',
+            amount: { currency_code: String(currency).toUpperCase(), value: Number(amount).toFixed(2) },
+          },
+        ],
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.id) {
+      return res.status(502).json({ error: data.message || 'Could not start PayPal checkout' });
+    }
+    res.json({ id: data.id });
+  })
+);
+
+app.post(
+  '/api/pay/paypal/capture',
+  wrap(async (req, res) => {
+    if (!paypalConfigured()) {
+      return res.status(503).json({ error: 'Card / PayPal payments are not configured yet.' });
+    }
+    const { orderId, orderNumber } = req.body || {};
+    if (!orderId) return res.status(400).json({ error: 'Missing PayPal order id' });
+    const token = await paypalAccessToken();
+    const r = await fetchWithTimeout(`${PAYPAL_BASE}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return res.status(502).json({ error: data.message || 'Could not capture PayPal payment' });
+    }
+    const completed = data.status === 'COMPLETED';
+    if (completed && orderNumber) {
+      await orders.update(String(orderNumber).toUpperCase(), {
+        paymentStatus: 'paid',
+        status: 'confirmed',
+        paypalOrderId: data.id || orderId,
+        paidAt: new Date(),
+      });
+    }
+    res.json({ status: data.status, id: data.id || orderId, captured: completed });
+  })
+);
+
 // ---- settings + analytics -----------------------------------------------------
 app.get('/api/settings', wrap(async (_req, res) => res.json({ success: true, data: await settings.get() })));
 app.put(
@@ -463,7 +564,8 @@ app.put(
 
 app.get(
   '/api/analytics',
-  wrap(async (_req, res) => {
+  wrap(async (req, res) => {
+    if (!requireAdmin(req, res)) return;
     const [totalRevenue, totalOrders, totalCustomers, totalProducts] = await Promise.all([
       orders.sumTotal(),
       orders.count(),
@@ -485,8 +587,8 @@ app.get(
   })
 );
 
-app.get('/api/customers', wrap(async (_req, res) => {
-  // Lightweight customer listing for the admin dashboard (PII minimised).
+app.get('/api/customers', wrap(async (req, res) => {
+  if (!requireAdmin(req, res)) return;
   res.json({ success: true, count: await users.count(), data: [] });
 }));
 

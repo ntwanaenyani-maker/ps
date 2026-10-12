@@ -16,6 +16,13 @@ services:
       # Optional: enables hosted card checkout.
       - key: PAYSTACK_SECRET_KEY
         sync: false
+      # PayPal REST app credentials (Card & PayPal checkout).
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_ENV
+        value: sandbox
       # Google OAuth web client ID (verifies ID tokens at /api/auth/google).
       - key: GOOGLE_CLIENT_ID
         sync: false
@@ -38,4 +45,7 @@ services:
           property: host
       # Google OAuth web client ID (public; rendered by the sign-in modal).
       - key: VITE_GOOGLE_CLIENT_ID
+        sync: false
+      # PayPal public client ID (renders the Card & PayPal buttons).
+      - key: VITE_PAYPAL_CLIENT_ID
         sync: false

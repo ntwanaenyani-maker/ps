@@ -4,10 +4,11 @@ import { formatPrice } from '../utils/formatters';
 import { dbService } from '../services/db';
 import { apiService } from '../services/api';
 import { PayInstructions } from './PayInstructions';
-import { getOrderWhatsAppUrl, getOfflineEftWhatsAppUrl, STORE_WHATSAPP_DISPLAY } from '../lib/whatsapp';
+import { getOrderWhatsAppUrl, getOfflineEftWhatsAppUrl } from '../lib/whatsapp';
 import { generateOrderRef } from '../lib/orderRef';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
-import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Send, Loader2 } from 'lucide-react';
+import { PayPalPayment } from './PayPalPayment';
+import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Loader2 } from 'lucide-react';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -28,8 +29,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onClose,
   onOrderCompleted,
 }) => {
-  if (!isOpen || cart.length === 0) return null;
-
   const [customer, setCustomer] = useState<OrderCustomer>({
     fullName: currentUser?.name || '',
     email: currentUser?.email || '',
@@ -41,15 +40,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     country: 'South Africa',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'instant-eft' | 'payfast' | 'cod' | 'wire'>('wire'); // Offline EFT default
+  const [paymentMethod, setPaymentMethod] = useState<'paypal' | 'instant-eft' | 'payfast' | 'cod' | 'wire'>('wire'); // Offline EFT default
   const [autoSendWhatsAppEft, setAutoSendWhatsAppEft] = useState(true);
-  const [cardNumber, setCardNumber] = useState('•••• •••• •••• 4242');
-  const [cardExpiry, setCardExpiry] = useState('08/29');
-  const [cardCvc, setCardCvc] = useState('892');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [paypalOrder, setPaypalOrder] = useState<Order | null>(null);
 
   const provisionalRef = React.useMemo(() => generateOrderRef(), []);
+
+  if (!isOpen || cart.length === 0) return null;
 
   const rawSubtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
   const discountAmount = Math.round((rawSubtotal * discountPercent) / 100);
@@ -86,32 +85,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       // Record locally too so confirmation/tracking works offline
       dbService.addServerOrder(order);
 
-      // Card payments: hand off to Paystack when a secret key is configured.
-      if (paymentMethod === 'card') {
-        try {
-          const pay = await apiService.initializePayment({
-            email: customer.email,
-            amount: total,
-            orderNumber: order.id,
-          });
-          if (pay.paystackConfigured && pay.authorizationUrl) {
-            window.location.href = pay.authorizationUrl;
-            return; // redirecting to hosted checkout
-          }
-          // Paystack not configured yet — show its guidance and keep the order pending.
-          setSubmitError(pay.message || 'Card payments are coming soon. Use Offline EFT or Pay On Delivery.');
-          setIsSubmitting(false);
-          onOrderCompleted(order);
-          return;
-        } catch (payErr: any) {
-          setSubmitError(payErr.message || 'Card payment could not start. Use Offline EFT instead.');
-          setIsSubmitting(false);
-          onOrderCompleted(order);
-          return;
-        }
-      }
-
       setIsSubmitting(false);
+
+      // Card / PayPal: create the order first, then hand off to PayPal. The
+      // server marks the order paid once the payment is captured.
+      if (paymentMethod === 'paypal') {
+        setPaypalOrder(order);
+        return;
+      }
 
       // Auto-send WhatsApp if Offline EFT is chosen and auto-send is checked
       if ((paymentMethod === 'wire' || paymentMethod === 'instant-eft') && autoSendWhatsAppEft) {
@@ -134,6 +115,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setIsSubmitting(false);
       setSubmitError(err.message || 'Could not place the order. Please try again.');
     }
+  };
+
+  const handlePayPalApproved = () => {
+    if (paypalOrder) onOrderCompleted(paypalOrder);
   };
 
   const whatsappCheckoutUrl = getOrderWhatsAppUrl(cart, total, provisionalRef, customer.fullName);
@@ -290,16 +275,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setPaymentMethod('card')}
+                    onClick={() => setPaymentMethod('paypal')}
                     className={`p-3 text-left border rounded-xs transition-all cursor-pointer flex flex-col justify-between ${
-                      paymentMethod === 'card'
+                      paymentMethod === 'paypal'
                         ? 'border-stone-950 bg-stone-950 text-white shadow-xs'
                         : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
                     }`}
                   >
                     <CreditCard className="w-4 h-4 mb-1.5" />
-                    <span className="text-xs font-semibold">Debit / Credit Card</span>
-                    <span className="text-[10px] font-mono opacity-80">Visa & Mastercard</span>
+                    <span className="text-xs font-semibold">Card & PayPal</span>
+                    <span className="text-[10px] font-mono opacity-80">Secure online payment</span>
                   </button>
 
                   <button
@@ -339,41 +324,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                 )}
 
-                {paymentMethod === 'card' && (
-                  <div className="p-4 bg-stone-50 border border-stone-200 rounded-xs space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-mono text-stone-600 mb-1">Card Number</label>
-                      <input
-                        type="text"
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value)}
-                        placeholder="•••• •••• •••• 4242"
-                        className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-xs font-mono text-stone-900 focus:outline-none focus:border-stone-900"
-                      />
+                {paymentMethod === 'paypal' && (
+                  paypalOrder ? (
+                    <PayPalPayment
+                      amount={total}
+                      currency={currency}
+                      orderNumber={paypalOrder.id}
+                      onApproved={handlePayPalApproved}
+                      onError={setSubmitError}
+                    />
+                  ) : (
+                    <div className="p-4 bg-stone-50 border border-stone-200 rounded-xs text-xs space-y-1.5">
+                      <p className="font-semibold text-stone-900">Card & PayPal</p>
+                      <p className="text-stone-600 text-[11px] leading-relaxed">
+                        Continue to secure PayPal checkout to pay by card or with your PayPal
+                        balance. Your order is confirmed automatically once payment clears.
+                      </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-mono text-stone-600 mb-1">Expiry</label>
-                        <input
-                          type="text"
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(e.target.value)}
-                          placeholder="MM/YY"
-                          className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-xs font-mono text-stone-900 focus:outline-none focus:border-stone-900"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-mono text-stone-600 mb-1">CVV</label>
-                        <input
-                          type="text"
-                          value={cardCvc}
-                          onChange={(e) => setCardCvc(e.target.value)}
-                          placeholder="CVV"
-                          className="w-full bg-white border border-stone-300 rounded-xs px-3 py-2 text-xs font-mono text-stone-900 focus:outline-none focus:border-stone-900"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  )
                 )}
 
                 {paymentMethod === 'cod' && (
@@ -446,23 +414,29 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 {submitError && (
                   <div className="p-3 bg-rose-50 border border-rose-200 rounded-xs text-rose-700 text-xs">{submitError}</div>
                 )}
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-3.5 px-6 bg-stone-950 hover:bg-stone-850 text-white text-xs font-semibold uppercase tracking-widest rounded-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
-                >
-                  {isSubmitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Placing Your Order…</span>
-                    </span>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>Authorize Order · {formatPrice(total, currency)}</span>
-                    </>
-                  )}
-                </button>
+                {!(paymentMethod === 'paypal' && paypalOrder) && (
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-3.5 px-6 bg-stone-950 hover:bg-stone-850 text-white text-xs font-semibold uppercase tracking-widest rounded-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    {isSubmitting ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Placing Your Order…</span>
+                      </span>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>
+                          {paymentMethod === 'paypal'
+                            ? `Continue to PayPal · ${formatPrice(total, currency)}`
+                            : `Authorize Order · ${formatPrice(total, currency)}`}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 {/* Direct WhatsApp Order Alternative */}
                 <a
@@ -477,7 +451,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 <div className="text-center text-[10px] font-mono text-stone-400 flex items-center justify-center gap-1.5 pt-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-stone-600" />
-                  <span>Permanent Record Saved to Database Engine</span>
+                  <span>Secure checkout · Your data is encrypted in transit</span>
                 </div>
               </div>
             </div>

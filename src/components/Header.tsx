@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ShoppingBag, Heart, Database, Menu, X, User, Download } from 'lucide-react';
+import { Search, ShoppingBag, Heart, Menu, X, User } from 'lucide-react';
 import { Currency, UserAccount } from '../types/store';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 
@@ -13,7 +13,6 @@ interface HeaderProps {
   onOpenWishlist: () => void;
   onOpenAccount: () => void;
   onOpenSearch: () => void;
-  onOpenDatabaseModal: () => void;
   onOpenOrderLookup: () => void;
   onSelectCategory: (cat: string) => void;
 }
@@ -28,7 +27,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWishlist,
   onOpenAccount,
   onOpenSearch,
-  onOpenDatabaseModal,
   onOpenOrderLookup,
   onSelectCategory,
 }) => {
@@ -142,16 +140,6 @@ export const Header: React.FC<HeaderProps> = ({
               <option value="GBP">GBP (£)</option>
             </select>
           </div>
-
-          {/* Database Studio Trigger */}
-          <button
-            onClick={onOpenDatabaseModal}
-            title="Inspect Free Persistent Database (Orders, Inventory & JSON)"
-            className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-mono font-medium text-stone-700 bg-stone-200/70 hover:bg-stone-200 hover:text-stone-950 rounded-xs transition-colors cursor-pointer"
-          >
-            <Database className="w-3.5 h-3.5 text-stone-600" />
-            <span>Free DB</span>
-          </button>
 
           {/* Search Trigger */}
           <button
@@ -292,16 +280,6 @@ export const Header: React.FC<HeaderProps> = ({
                 className="text-left py-1 hover:text-stone-950 cursor-pointer"
               >
                 Track Order
-              </button>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenDatabaseModal();
-                }}
-                className="text-left py-1 hover:text-stone-950 cursor-pointer flex items-center gap-1.5"
-              >
-                <Database className="w-3.5 h-3.5 text-stone-700" />
-                <span>Free Database Engine Inspector</span>
               </button>
               <a
                 href="https://wa.me/27723819402"

@@ -210,6 +210,12 @@ export const orders = {
     if (mode === 'mongodb') return Order.findOne({ orderNumber: ref });
     return memory.orders.find((o) => o.orderNumber === ref) || null;
   },
+  async update(ref, patch) {
+    if (mode === 'mongodb') return Order.findOneAndUpdate({ orderNumber: ref }, { $set: patch }, { new: true });
+    const o = memory.orders.find((x) => x.orderNumber === ref);
+    if (o) Object.assign(o, patch);
+    return o || null;
+  },
   async count() {
     if (mode === 'mongodb') return Order.estimatedDocumentCount();
     return memory.orders.length;
