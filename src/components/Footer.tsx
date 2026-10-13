@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, Check, MessageCircle, Mail, Phone, MapPin, Lock } from 'lucide-react';
+import { ArrowRight, Check, MessageCircle, Mail, Phone, MapPin, Lock, BookOpen } from 'lucide-react';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 import { PolicyKind } from './PolicyModal';
 
@@ -8,6 +8,7 @@ interface FooterProps {
   onOpenPolicy: (policy: PolicyKind) => void;
   onSelectCategory: (cat: string) => void;
   onOpenAdmin: () => void;
+  onOpenProductGuide: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -15,6 +16,7 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenPolicy,
   onSelectCategory,
   onOpenAdmin,
+  onOpenProductGuide,
 }) => {
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
@@ -148,6 +150,15 @@ export const Footer: React.FC<FooterProps> = ({
               Customer Care
             </h4>
             <ul className="space-y-2 text-xs font-mono text-stone-400">
+              <li>
+                <button
+                  onClick={onOpenProductGuide}
+                  className="group flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 font-semibold transition-colors cursor-pointer text-left"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span className="underline underline-offset-2">Products Guide</span>
+                </button>
+              </li>
               <li>
                 <button
                   onClick={onOpenOrderLookup}

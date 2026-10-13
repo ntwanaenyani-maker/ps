@@ -21,6 +21,7 @@ import { Footer } from './components/Footer';
 import { AccountModal } from './components/AccountModal';
 import { PolicyModal, PolicyKind } from './components/PolicyModal';
 import { AdminPanel } from './components/AdminPanel';
+import { ProductGuideModal } from './components/ProductGuideModal';
 import { addRecentView } from './services/recentViews';
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
   const [isOrderLookupOpen, setIsOrderLookupOpen] = useState(false);
   const [policyModal, setPolicyModal] = useState<PolicyKind | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isProductGuideOpen, setIsProductGuideOpen] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodsResponse | null>(null);
 
   const refreshPaymentMethods = useCallback(() => {
@@ -144,6 +146,7 @@ export default function App() {
         else if (isOrderLookupOpen) setIsOrderLookupOpen(false);
         else if (policyModal) setPolicyModal(null);
         else if (isAdminOpen) setIsAdminOpen(false);
+        else if (isProductGuideOpen) setIsProductGuideOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -159,6 +162,7 @@ export default function App() {
     isOrderLookupOpen,
     policyModal,
     isAdminOpen,
+    isProductGuideOpen,
   ]);
 
   const handleAddToCart = (product: Product, quantity = 1, variantId?: string) => {
@@ -319,6 +323,7 @@ export default function App() {
         onOpenOrderLookup={() => setIsOrderLookupOpen(true)}
         onOpenPolicy={(policy) => setPolicyModal(policy)}
         onOpenAdmin={() => setIsAdminOpen(true)}
+        onOpenProductGuide={() => setIsProductGuideOpen(true)}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat as Category);
           handleScrollToGrid();
@@ -453,6 +458,12 @@ export default function App() {
           setIsAdminOpen(false);
           refreshPaymentMethods();
         }}
+      />
+
+      {/* Products Guide slide presentation */}
+      <ProductGuideModal
+        isOpen={isProductGuideOpen}
+        onClose={() => setIsProductGuideOpen(false)}
       />
     </div>
   );
