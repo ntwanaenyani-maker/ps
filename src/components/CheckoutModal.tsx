@@ -9,7 +9,7 @@ import { generateOrderRef } from '../lib/orderRef';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 import { PayPalPayment } from './PayPalPayment';
 import { StitchPayment } from './StitchPayment';
-import { PaymentMethodsResponse } from '../services/api';
+import { PaymentMethodsResponse, ShippingQuote } from '../services/api';
 import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Loader2, Zap } from 'lucide-react';
 
 type CheckoutMethod = 'paypal' | 'payshap' | 'stitch' | 'instant-eft' | 'payfast' | 'cod' | 'wire';
@@ -55,6 +55,55 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const provisionalRef = React.useMemo(() => generateOrderRef(), []);
 
+  const rawSubtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+
+  // Live courier rates from The Courier Guy, fetched as the customer types.
+  const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
+  const [selectedShipping, setSelectedShipping] = useState('');
+  const [shippingState, setShippingState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(0);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const city = customer.city?.trim();
+    const postalCode = customer.postalCode?.trim();
+    if (!city || !postalCode) {
+      setShippingQuotes([]);
+      setShippingState('idle');
+      return;
+    }
+    let cancelled = false;
+    setShippingState('loading');
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiService.getShippingQuote({
+          address: customer.address,
+          city,
+          province: customer.province,
+          postalCode,
+          subtotal: rawSubtotal,
+          items: cart.map((i) => ({ grams: i.product.grams, quantity: i.quantity })),
+        });
+        if (cancelled) return;
+        setShippingQuotes(res.quotes || []);
+        setFreeShippingThreshold(res.freeShippingThreshold || 0);
+        setShippingState('ready');
+        setSelectedShipping((prev) =>
+          res.quotes?.some((q) => q.code === prev) ? prev : res.quotes?.[0]?.code || ''
+        );
+      } catch {
+        if (cancelled) return;
+        setShippingQuotes([]);
+        setShippingState('error');
+      }
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, customer.address, customer.city, customer.province, customer.postalCode, rawSubtotal]);
+
   // Which methods are switched on in the admin panel. When the list hasn't
   // loaded yet we fall back to the historical defaults (all shown) so checkout
   // never breaks.
@@ -92,11 +141,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   if (!isOpen || cart.length === 0) return null;
 
-  const rawSubtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
   const discountAmount = Math.round((rawSubtotal * discountPercent) / 100);
-  const FREE_SHIPPING_THRESHOLD = 1200;
-  const isFreeShipping = rawSubtotal >= FREE_SHIPPING_THRESHOLD;
-  const shippingAmount = isFreeShipping ? 0 : 120; // R120 national courier
+  const selectedQuote = shippingQuotes.find((q) => q.code === selectedShipping) || shippingQuotes[0] || null;
+  const isFreeShipping =
+    Boolean(selectedQuote && selectedQuote.rate === 0) ||
+    (freeShippingThreshold > 0 && rawSubtotal >= freeShippingThreshold);
+  const shippingAmount = isFreeShipping
+    ? 0
+    : selectedQuote
+      ? selectedQuote.rate
+      : shippingState === 'error'
+        ? 120
+        : 0;
   const vat = Math.round((rawSubtotal - discountAmount) * 0.15); // 15% South African VAT included
   const total = Math.max(0, rawSubtotal - discountAmount + shippingAmount);
 
@@ -119,6 +175,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         subtotal: rawSubtotal,
         discount: discountAmount,
         shipping: shippingAmount,
+        courierService: selectedQuote?.code,
         total,
         currency,
         paymentMethod,
@@ -297,6 +354,56 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Live courier rates (The Courier Guy) */}
+                <div className="pt-4 mt-1 border-t border-stone-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-mono text-stone-600 uppercase tracking-wider">
+                      Courier Delivery · The Courier Guy
+                    </span>
+                    {shippingState === 'loading' && <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-400" />}
+                  </div>
+
+                  {shippingQuotes.length > 0 ? (
+                    <div className="space-y-2">
+                      {shippingQuotes.map((q) => {
+                        const active = selectedQuote?.code === q.code;
+                        return (
+                          <button
+                            type="button"
+                            key={q.code}
+                            onClick={() => setSelectedShipping(q.code)}
+                            className={`w-full flex items-center justify-between gap-3 p-2.5 border rounded-xs text-left transition-all cursor-pointer ${
+                              active
+                                ? 'border-stone-900 bg-stone-900 text-white shadow-xs'
+                                : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                            }`}
+                          >
+                            <span className="flex flex-col min-w-0">
+                              <span className="text-xs font-semibold">{q.name}</span>
+                              {q.description && (
+                                <span className={`text-[10px] font-mono ${active ? 'text-stone-300' : 'text-stone-500'}`}>
+                                  {q.description}
+                                </span>
+                              )}
+                            </span>
+                            <span className="font-mono text-xs font-bold tabular-nums shrink-0">
+                              {q.rate === 0 ? 'Free' : formatPrice(q.rate, currency)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-stone-500 leading-relaxed">
+                      {freeShippingThreshold > 0 && rawSubtotal >= freeShippingThreshold
+                        ? 'Free nationwide courier unlocked on this order.'
+                        : shippingState === 'error'
+                          ? 'Live rates are unavailable right now — a standard R120 courier applies.'
+                          : 'Enter your city and postal code to see live courier rates.'}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -537,9 +644,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span>Door-to-Door Courier</span>
+                    <span>Courier{selectedQuote && !isFreeShipping ? ` · ${selectedQuote.name}` : ''}</span>
                     <span className="font-mono tabular-nums">
-                      {isFreeShipping ? <span className="text-emerald-700 font-semibold">Complimentary</span> : formatPrice(shippingAmount, currency)}
+                      {isFreeShipping ? (
+                        <span className="text-emerald-700 font-semibold">Complimentary</span>
+                      ) : shippingState === 'idle' ? (
+                        <span className="text-stone-400">at checkout</span>
+                      ) : (
+                        formatPrice(shippingAmount, currency)
+                      )}
                     </span>
                   </div>
                   <div className="flex justify-between">

@@ -276,6 +276,119 @@ mutation Simulate($paymentRequestId: ID!) {
   }) { paymentRequestId }
 }`;
 
+// ---- The Courier Guy (Shiplogic) ----------------------------------------------
+// The Courier Guy runs on the Shiplogic platform. Their public API base is
+// https://api.portal.thecourierguy.co.za and authenticates with a Bearer token.
+const COURIER_GUY_BASE = (
+  process.env.COURIER_GUY_API_BASE || 'https://api.portal.thecourierguy.co.za'
+).replace(/\/+$/, '');
+const COURIER_GUY_SERVICE_LEVELS = ['ECO', 'PRI', 'OVN'];
+const COURIER_GUY_VAT_RATE = 1.15;
+
+function courierGuyConfigured() {
+  return Boolean(process.env.COURIER_GUY_API_KEY);
+}
+
+async function courierGuyRequest(path, { method = 'GET', body } = {}) {
+  const res = await fetchWithTimeout(
+    `${COURIER_GUY_BASE}${path}`,
+    {
+      method,
+      headers: {
+        Authorization: `Bearer ${process.env.COURIER_GUY_API_KEY}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'PhethagatsaSolutions/2.0 (+https://phethagatsa-solutions.onrender.com)',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    },
+    15000
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data?.message || data?.error || `The Courier Guy request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+let courierAccountCache = { at: 0, address: null };
+
+async function courierCollectionAddress() {
+  const override = (process.env.COURIER_GUY_COLLECTION_ADDRESS || '').trim();
+  if (override) {
+    try {
+      return JSON.parse(override);
+    } catch {
+      // fall through to the account default if the override is malformed
+    }
+  }
+  if (courierAccountCache.address && Date.now() - courierAccountCache.at < 6 * 60 * 60 * 1000) {
+    return courierAccountCache.address;
+  }
+  const data = await courierGuyRequest('/accounts');
+  const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+  const address = accounts.find((a) => a?.default_collection_address?.address)?.default_collection_address?.address || null;
+  if (address) courierAccountCache = { at: Date.now(), address };
+  return address;
+}
+
+function courierDeliveryAddress(customer) {
+  const street = String(customer?.address || '').trim();
+  const city = String(customer?.city || '').trim();
+  const zone = String(customer?.province || '').trim();
+  const code = String(customer?.postalCode || '').trim();
+  return {
+    entered_address: [street, city, code, zone, 'ZA'].filter(Boolean).join(', '),
+    street_address: street,
+    local_area: '',
+    city,
+    zone,
+    code,
+    country: 'ZA',
+    type: 'residential',
+  };
+}
+
+function courierParcels(items) {
+  const totalGrams = Array.isArray(items)
+    ? items.reduce((sum, i) => sum + (Number(i?.grams) || 0) * (Number(i?.quantity) || 1), 0)
+    : 0;
+  const envDefault = Number(process.env.COURIER_GUY_DEFAULT_WEIGHT_KG) || 1;
+  const weightKg = Math.min(30, Math.max(0.5, totalGrams > 0 ? totalGrams / 1000 : envDefault));
+  return [
+    {
+      submitted_length_cm: 30,
+      submitted_width_cm: 20,
+      submitted_height_cm: 12,
+      submitted_weight_kg: Math.round(weightKg * 100) / 100,
+      parcel_description: 'Phethagatsa Solutions order',
+      alternative_tracking_reference: '',
+    },
+  ];
+}
+
+async function shippingSettings() {
+  const s = await settings.get();
+  const val = (s && typeof s.toObject === 'function' ? s.toObject() : s) || {};
+  return {
+    defaultShipping: Number(val.defaultShipping) || 65,
+    freeShippingThreshold: Number(val.freeShippingThreshold) || 450,
+  };
+}
+
+function fallbackQuote(defaultShipping, reason) {
+  return {
+    code: 'STD',
+    name: 'Standard nationwide delivery',
+    description: 'Delivered in 3 - 5 business days',
+    rate: defaultShipping,
+    rateExcludingVat: Math.round((defaultShipping / COURIER_GUY_VAT_RATE) * 100) / 100,
+    fallback: true,
+    reason: reason || null,
+  };
+}
+
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // ---- email + OTP helpers ------------------------------------------------------
@@ -692,6 +805,7 @@ app.post(
       subtotal: Number(body.subtotal) || 0,
       discount: Number(body.discount) || 0,
       shipping: Number(body.shipping) || 0,
+      courierService: body.courierService || null,
       tax: 0,
       total: Number(body.total) || 0,
       currency: body.currency || 'ZAR',
@@ -742,6 +856,116 @@ app.get(
     const order = (await orders.findByRef(ref)) || (await orders.findByRef(normalized));
     if (!order) return res.status(404).json({ error: 'Order not found' });
     res.json({ order: mapOrder(order) });
+  })
+);
+
+// ---- shipping (The Courier Guy) -----------------------------------------------
+app.post(
+  '/api/shipping/quote',
+  wrap(async (req, res) => {
+    const body = req.body || {};
+    const customer = body.customer || body;
+    const subtotal = Number(body.subtotal) || 0;
+    const { defaultShipping, freeShippingThreshold } = await shippingSettings();
+    const freeShipping = freeShippingThreshold > 0 && subtotal >= freeShippingThreshold;
+
+    if (!String(customer?.city || '').trim() || !String(customer?.postalCode || '').trim()) {
+      return res.status(400).json({ error: 'Suburb/city and postal code are required for a delivery quote' });
+    }
+
+    const base = {
+      success: true,
+      provider: 'The Courier Guy',
+      currency: 'ZAR',
+      configured: courierGuyConfigured(),
+      freeShipping,
+      freeShippingThreshold,
+      defaultShipping,
+      subtotal,
+    };
+
+    if (freeShipping) {
+      return res.json({
+        ...base,
+        quotes: [
+          {
+            code: 'FREE',
+            name: 'Free courier delivery',
+            description: `Complimentary nationwide courier on orders over R${freeShippingThreshold}`,
+            rate: 0,
+            rateExcludingVat: 0,
+          },
+        ],
+      });
+    }
+
+    if (!courierGuyConfigured()) {
+      return res.json({ ...base, quotes: [fallbackQuote(defaultShipping, 'not_configured')] });
+    }
+
+    try {
+      const collection = await courierCollectionAddress();
+      const data = await courierGuyRequest('/rates', {
+        method: 'POST',
+        body: {
+          collection_address: collection,
+          delivery_address: courierDeliveryAddress(customer),
+          parcels: courierParcels(body.items),
+        },
+      });
+      const quotes = (Array.isArray(data.rates) ? data.rates : [])
+        .map((r) => {
+          const sl = r.service_level || {};
+          return {
+            code: sl.code || '',
+            name: sl.name || sl.code || 'Courier',
+            description: sl.description || '',
+            rate: Math.round(Number(r.rate) * 100) / 100,
+            rateExcludingVat: Math.round(Number(r.rate_excluding_vat) * 100) / 100,
+            deliveryDateFrom: sl.delivery_date_from || null,
+            deliveryDateTo: sl.delivery_date_to || null,
+          };
+        })
+        .filter((q) => Number.isFinite(q.rate) && q.rate >= 0);
+      if (!quotes.length) {
+        return res.json({ ...base, quotes: [fallbackQuote(defaultShipping, 'no_rates')] });
+      }
+      res.json({ ...base, collection, quotes });
+    } catch (err) {
+      console.warn('[courier guy] quote failed:', err.message);
+      res.json({
+        ...base,
+        configured: false,
+        error: 'Courier quote unavailable',
+        quotes: [fallbackQuote(defaultShipping, 'quote_failed')],
+      });
+    }
+  })
+);
+
+app.get(
+  '/api/shipping/status',
+  wrap(async (req, res) => {
+    let collection = null;
+    let error = null;
+    if (courierGuyConfigured()) {
+      try {
+        collection = await courierCollectionAddress();
+      } catch (err) {
+        error = err.message;
+      }
+    }
+    res.json({
+      success: true,
+      provider: 'The Courier Guy',
+      configured: courierGuyConfigured() && Boolean(collection),
+      apiKeySet: courierGuyConfigured(),
+      serviceLevels: COURIER_GUY_SERVICE_LEVELS,
+      collectionAddress: collection,
+      webhookUrl: `${publicBaseUrl(req)}/api/webhooks/courierguy`,
+      webhookConfigured: Boolean(process.env.COURIER_GUY_WEBHOOK_SECRET),
+      error,
+    });
   })
 );
 
@@ -1107,6 +1331,17 @@ app.get(
           url: `${publicBaseUrl(req)}/api/webhooks/paypal`,
           configured: Boolean(process.env.PAYPAL_WEBHOOK_ID),
         },
+        courierguy: {
+          url: `${publicBaseUrl(req)}/api/webhooks/courierguy`,
+          configured: Boolean(process.env.COURIER_GUY_API_KEY),
+          secretSet: Boolean(process.env.COURIER_GUY_WEBHOOK_SECRET),
+        },
+      },
+      courier: {
+        provider: 'The Courier Guy',
+        configured: courierGuyConfigured(),
+        apiKeySet: courierGuyConfigured(),
+        serviceLevels: COURIER_GUY_SERVICE_LEVELS,
       },
     });
   })
@@ -1216,6 +1451,109 @@ app.post(
     }
 
     res.json({ received: true });
+  })
+);
+
+// The Courier Guy (Shiplogic) tracking webhook. In the Shiplogic / The Courier
+// Guy portal, create a webhook to this URL subscribed to `tracking-event`
+// (and optionally `shipment-note`, `parcel-dimension-changes`).
+app.post(
+  '/api/webhooks/courierguy',
+  wrap(async (req, res) => {
+    const secret = process.env.COURIER_GUY_WEBHOOK_SECRET;
+    if (secret) {
+      const provided = req.headers['x-courierguy-secret'] || req.headers['x-webhook-secret'] || req.query.secret;
+      if (provided !== secret) return res.status(401).json({ error: 'Invalid webhook secret' });
+    }
+
+    const body = req.body || {};
+    const reference =
+      body.custom_tracking_reference || body.tracking_reference || body.shipment?.custom_tracking_reference || null;
+    const shipmentId = body.shipment_id || body.shipment?.shipment_id || body.shipment?.id || null;
+    const status = String(body.status || body.tracking_status || '').toLowerCase();
+    const events = Array.isArray(body.tracking_events) ? body.tracking_events : [];
+    const lastEvent = events.length ? events[events.length - 1] : null;
+
+    const patch = { courierLastEvent: new Date() };
+    if (shipmentId) patch.courierShipmentId = String(shipmentId);
+    if (status) patch.courierTrackingStatus = status;
+    if (lastEvent?.message) patch.courierTrackingMessage = lastEvent.message;
+
+    const statusMap = {
+      delivered: 'delivered',
+      'out-for-delivery': 'dispatched',
+      'in-transit': 'shipped',
+      collected: 'shipped',
+      'at-collection': 'processing',
+      'delivery-failed': 'processing',
+    };
+    if (statusMap[status]) patch.status = statusMap[status];
+
+    let order = null;
+    if (reference) order = await orders.findByCourier(String(reference));
+    if (!order && shipmentId) order = await orders.findByCourier(String(shipmentId));
+    if (order) await orders.update(order.orderNumber, patch);
+
+    console.log('[courier webhook]', reference || shipmentId || '(no ref)', status || '(no status)');
+    res.json({ received: true, matched: Boolean(order) });
+  })
+);
+
+// Admin: create a The Courier Guy waybill for an existing order (on demand —
+// shipments are not auto-created, so a prepaid account is never overdrawn).
+app.post(
+  '/api/admin/courier/shipment',
+  wrap(async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    if (!courierGuyConfigured()) return res.status(503).json({ error: 'The Courier Guy is not configured' });
+
+    const ref = String(req.body?.orderNumber || req.body?.ref || '').toUpperCase().replace('#', '');
+    const order = await orders.findByRef(ref);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    const o = typeof order.toObject === 'function' ? order.toObject() : order;
+    try {
+      const serviceLevelCode = String(req.body?.serviceLevelCode || o.courierService || 'ECO').toUpperCase();
+      const data = await courierGuyRequest('/shipments', {
+        method: 'POST',
+        body: {
+          collection_address: await courierCollectionAddress(),
+          collection_contact: {
+            name: process.env.BREVO_SENDER_NAME || 'Phethagatsa Solutions',
+            mobile_number: process.env.STORE_WHATSAPP_NUMBER || '27829564472',
+            email: process.env.ADMIN_EMAIL || 'support@phethagatsa.co.za',
+          },
+          delivery_address: courierDeliveryAddress({
+            address: o.shippingAddress,
+            city: o.city,
+            province: o.province,
+            postalCode: o.postalCode,
+          }),
+          delivery_contact: {
+            name: o.customerName,
+            mobile_number: o.customerPhone,
+            email: o.customerEmail,
+          },
+          parcels: courierParcels(o.items),
+          service_level_code: serviceLevelCode,
+          custom_tracking_reference: o.orderNumber,
+        },
+      });
+      const shipmentId = data?.id || data?.shipment_id || data?.shipment?.id || null;
+      const trackingReference =
+        data?.custom_tracking_reference || data?.short_tracking_reference || data?.tracking_reference || o.orderNumber;
+      await orders.update(o.orderNumber, {
+        courierService: serviceLevelCode,
+        courierShipmentId: shipmentId ? String(shipmentId) : null,
+        courierTrackingReference: trackingReference,
+        courierTrackingStatus: 'created',
+        status: 'processing',
+      });
+      res.json({ success: true, data });
+    } catch (err) {
+      console.warn('[courier guy] shipment failed:', err.message);
+      res.status(502).json({ error: err.message || 'Could not create shipment' });
+    }
   })
 );
 

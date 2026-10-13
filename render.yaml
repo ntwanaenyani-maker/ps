@@ -57,6 +57,19 @@ services:
       # Google OAuth web client ID (verifies ID tokens at /api/auth/google).
       - key: GOOGLE_CLIENT_ID
         sync: false
+      # The Courier Guy (Shiplogic) — live delivery rates + tracking webhooks.
+      - key: COURIER_GUY_API_KEY
+        sync: false
+      - key: COURIER_GUY_API_BASE
+        value: https://api.portal.thecourierguy.co.za
+      - key: COURIER_GUY_DEFAULT_WEIGHT_KG
+        value: "1"
+      # Optional shared secret required on /api/webhooks/courierguy.
+      - key: COURIER_GUY_WEBHOOK_SECRET
+        sync: false
+      # Public base URL of this API (used to build webhook URLs).
+      - key: PUBLIC_API_URL
+        sync: false
       # Comma-separated allowed origins, or * . Defaults to * if unset.
       - key: CORS_ORIGIN
         sync: false

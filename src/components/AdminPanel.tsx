@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Webhook,
   LogOut,
+  Truck,
 } from 'lucide-react';
 
 const ADMIN_KEY_STORAGE = 'phethagatsa_admin_key';
@@ -30,6 +31,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [loadError, setLoadError] = useState('');
   const [gateways, setGateways] = useState<AdminGateway[]>([]);
   const [webhooks, setWebhooks] = useState<AdminGatewaysResponse['webhooks'] | null>(null);
+  const [courier, setCourier] = useState<AdminGatewaysResponse['courier'] | null>(null);
   const [draft, setDraft] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -42,6 +44,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       const data = await adminService.getAdminGateways(key);
       setGateways(data.gateways);
       setWebhooks(data.webhooks);
+      setCourier(data.courier ?? null);
       const d: Record<string, boolean> = {};
       data.gateways.forEach((g) => (d[g.id] = g.enabled));
       setDraft(d);
@@ -99,6 +102,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     setAdminKey('');
     setGateways([]);
     setWebhooks(null);
+    setCourier(null);
     setDraft({});
   };
 
@@ -336,6 +340,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 </p>
                 <code className="block w-full text-[11px] font-mono bg-white border border-stone-200 rounded-xs px-2.5 py-2 text-stone-800 break-all">
                   {webhooks?.paypal.url || '—'}
+                </code>
+              </div>
+
+              <div className="mt-3 p-3.5 border border-stone-200 rounded-xs bg-stone-50 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-stone-900 flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-stone-500" />
+                    The Courier Guy · tracking
+                  </span>
+                  <span
+                    className={`text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-xs border ${
+                      courier?.configured
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}
+                  >
+                    {courier?.configured ? 'active' : 'not configured'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-500">
+                  Live delivery rates at checkout via The Courier Guy (service levels:
+                  <span className="font-mono"> {courier?.serviceLevels?.join(', ') || 'ECO, PRI'} </span>
+                  ). In the Shiplogic / The Courier Guy portal, add a webhook to this URL subscribed to
+                  <span className="font-mono"> tracking-event</span>,
+                  <span className="font-mono"> shipment-note</span>,
+                  <span className="font-mono"> parcel-dimension-changes</span>.
+                </p>
+                <code className="block w-full text-[11px] font-mono bg-white border border-stone-200 rounded-xs px-2.5 py-2 text-stone-800 break-all">
+                  {webhooks?.courierguy?.url || '—'}
                 </code>
               </div>
             </section>

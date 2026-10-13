@@ -32,10 +32,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const rawSubtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
   const discountAmount = Math.round((rawSubtotal * discountPercent) / 100);
-  const FREE_SHIPPING_THRESHOLD = 1200; // R1,200 in South Africa
+  const FREE_SHIPPING_THRESHOLD = 450; // matches the store's free-courier threshold
   const isFreeShipping = rawSubtotal >= FREE_SHIPPING_THRESHOLD;
-  const shippingAmount = isFreeShipping || rawSubtotal === 0 ? 0 : 120;
-  const total = Math.max(0, rawSubtotal - discountAmount + shippingAmount);
+  const total = Math.max(0, rawSubtotal - discountAmount);
 
   const progressPercent = Math.min(100, Math.round((rawSubtotal / FREE_SHIPPING_THRESHOLD) * 100));
 
@@ -236,7 +235,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <div className="flex justify-between">
                 <span>Courier Guy Delivery</span>
                 <span className="font-mono tabular-nums">
-                  {isFreeShipping ? <span className="text-emerald-700 font-semibold">Complimentary</span> : formatPrice(shippingAmount, currency)}
+                  {isFreeShipping ? (
+                    <span className="text-emerald-700 font-semibold">Complimentary</span>
+                  ) : (
+                    <span className="text-stone-400">Calculated at checkout</span>
+                  )}
                 </span>
               </div>
               <div className="flex justify-between text-sm font-bold text-stone-950 pt-2 border-t border-stone-200">

@@ -244,6 +244,19 @@ export const orders = {
     if (mode === 'mongodb') return Order.findOne({ orderNumber: ref });
     return memory.orders.find((o) => o.orderNumber === ref) || null;
   },
+  async findByCourier(ref) {
+    if (!ref) return null;
+    if (mode === 'mongodb') {
+      return Order.findOne({
+        $or: [{ orderNumber: ref }, { courierTrackingReference: ref }, { courierShipmentId: String(ref) }],
+      });
+    }
+    return (
+      memory.orders.find(
+        (o) => o.orderNumber === ref || o.courierTrackingReference === ref || o.courierShipmentId === String(ref)
+      ) || null
+    );
+  },
   async update(ref, patch) {
     if (mode === 'mongodb') return Order.findOneAndUpdate({ orderNumber: ref }, { $set: patch }, { new: true });
     const o = memory.orders.find((x) => x.orderNumber === ref);

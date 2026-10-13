@@ -97,6 +97,7 @@ export interface CheckoutPayload {
   subtotal: number;
   discount?: number;
   shipping?: number;
+  courierService?: string;
   total: number;
   currency?: string;
   paymentMethod?: string;
@@ -288,6 +289,34 @@ export const apiService = {
     return data.data;
   },
 
+  // ---- SHIPPING (The Courier Guy) ----
+  async getShippingQuote(params: {
+    address: string;
+    city: string;
+    province?: string;
+    postalCode: string;
+    subtotal?: number;
+    items?: { grams?: number; quantity?: number }[];
+  }): Promise<ShippingQuoteResponse> {
+    return request<ShippingQuoteResponse>('/api/shipping/quote', {
+      method: 'POST',
+      body: JSON.stringify({
+        customer: {
+          address: params.address,
+          city: params.city,
+          province: params.province,
+          postalCode: params.postalCode,
+        },
+        subtotal: params.subtotal,
+        items: params.items,
+      }),
+    });
+  },
+
+  async getShippingStatus(): Promise<ShippingStatus> {
+    return request<ShippingStatus>('/api/shipping/status');
+  },
+
   // ---- ADMIN ----
   async verifyAdminKey(key: string): Promise<boolean> {
     try {
@@ -299,11 +328,13 @@ export const apiService = {
   },
 
   async getAdminGateways(key: string): Promise<AdminGatewaysResponse> {
-    const data = await request<{ success: boolean; data: AdminGateway[]; webhooks: AdminGatewaysResponse['webhooks'] }>(
-      '/api/admin/gateways',
-      { headers: { 'X-API-Key': key } }
-    );
-    return { gateways: data.data, webhooks: data.webhooks };
+    const data = await request<{
+      success: boolean;
+      data: AdminGateway[];
+      webhooks: AdminGatewaysResponse['webhooks'];
+      courier: AdminGatewaysResponse['courier'];
+    }>('/api/admin/gateways', { headers: { 'X-API-Key': key } });
+    return { gateways: data.data, webhooks: data.webhooks, courier: data.courier };
   },
 
   async updateAdminGateways(
@@ -353,5 +384,51 @@ export interface AdminGateway {
 
 export interface AdminGatewaysResponse {
   gateways: AdminGateway[];
-  webhooks: { paypal: { url: string; configured: boolean } };
+  webhooks: {
+    paypal: { url: string; configured: boolean };
+    courierguy?: { url: string; configured: boolean; secretSet: boolean };
+  };
+  courier?: {
+    provider: string;
+    configured: boolean;
+    apiKeySet: boolean;
+    serviceLevels: string[];
+  };
+}
+
+export interface ShippingQuote {
+  code: string;
+  name: string;
+  description?: string;
+  rate: number;
+  rateExcludingVat?: number;
+  deliveryDateFrom?: string | null;
+  deliveryDateTo?: string | null;
+  fallback?: boolean;
+  reason?: string | null;
+}
+
+export interface ShippingQuoteResponse {
+  success: boolean;
+  provider: string;
+  currency: string;
+  configured: boolean;
+  freeShipping: boolean;
+  freeShippingThreshold: number;
+  defaultShipping: number;
+  subtotal: number;
+  quotes: ShippingQuote[];
+  error?: string;
+}
+
+export interface ShippingStatus {
+  success: boolean;
+  provider: string;
+  configured: boolean;
+  apiKeySet: boolean;
+  serviceLevels: string[];
+  collectionAddress: Record<string, unknown> | null;
+  webhookUrl: string;
+  webhookConfigured: boolean;
+  error?: string | null;
 }

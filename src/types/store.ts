@@ -125,6 +125,10 @@ export interface Order {
   createdAt: string;
   estimatedDelivery: string;
   trackingNumber?: string;
+  courierService?: string | null;
+  courierTrackingReference?: string | null;
+  courierShipmentId?: string | null;
+  courierTrackingStatus?: string | null;
   timeline?: OrderTimelineEvent[];
   notes?: string;
 }
