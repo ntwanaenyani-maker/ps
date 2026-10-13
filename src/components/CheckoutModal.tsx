@@ -9,10 +9,12 @@ import { generateOrderRef } from '../lib/orderRef';
 import { BRAND_LOGO_IMAGE } from '../data/initialProducts';
 import { PayPalPayment } from './PayPalPayment';
 import { StitchPayment } from './StitchPayment';
+import { PaxiPointPicker } from './PaxiPointPicker';
 import { PaymentMethodsResponse, ShippingQuote } from '../services/api';
-import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Loader2, Zap } from 'lucide-react';
+import { X, Lock, ShieldCheck, CreditCard, Landmark, Banknote, CheckCircle2, MessageCircle, Loader2, Zap, MapPin } from 'lucide-react';
 
 type CheckoutMethod = 'paypal' | 'payshap' | 'stitch' | 'instant-eft' | 'payfast' | 'cod' | 'wire';
+type ShippingMethod = 'courier' | 'paxi';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -63,6 +65,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [shippingState, setShippingState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(0);
 
+  // PAXI
+  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('courier');
+  const [paxiEnabled, setPaxiEnabled] = useState<boolean>(true);
+  const [paxiPointLocatorUrl, setPaxiPointLocatorUrl] = useState<string>(
+    import.meta.env.VITE_PAXI_POINT_LOCATOR_URL || 'https://map.paxi.co.za?size=l,m,s&status=1,3,4&maxordervalue=1000&output=nc,sn'
+  );
+  const [paxiPointLocatorOrigin, setPaxiPointLocatorOrigin] = useState<string>(
+    import.meta.env.VITE_PAXI_POINT_LOCATOR_ORIGIN || 'https://map.paxi.co.za'
+  );
+  const [paxiPoint, setPaxiPoint] = useState<{ code: string; name: string } | null>(null);
+  const [paxiService, setPaxiService] = useState<'PAXI_ECO' | 'PAXI_SPEED'>('PAXI_ECO');
+  const [paxiPickerOpen, setPaxiPickerOpen] = useState(false);
+
   React.useEffect(() => {
     if (!isOpen) return;
     const city = customer.city?.trim();
@@ -87,6 +102,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         if (cancelled) return;
         setShippingQuotes(res.quotes || []);
         setFreeShippingThreshold(res.freeShippingThreshold || 0);
+        setPaxiEnabled(res.paxiEnabled ?? true);
+        setPaxiPointLocatorUrl(res.paxiPointLocatorUrl || paxiPointLocatorUrl);
+        setPaxiPointLocatorOrigin(res.paxiPointLocatorOrigin || paxiPointLocatorOrigin);
+        // If user previously chose PAXI but quotes changed, keep it. Otherwise default to courier.
         setShippingState('ready');
         setSelectedShipping((prev) =>
           res.quotes?.some((q) => q.code === prev) ? prev : res.quotes?.[0]?.code || ''
@@ -146,13 +165,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const isFreeShipping =
     Boolean(selectedQuote && selectedQuote.rate === 0) ||
     (freeShippingThreshold > 0 && rawSubtotal >= freeShippingThreshold);
-  const shippingAmount = isFreeShipping
-    ? 0
-    : selectedQuote
-      ? selectedQuote.rate
-      : shippingState === 'error'
-        ? 120
-        : 0;
+
+  const paxiRate =
+    shippingQuotes.find((q) => q.code === (shippingMethod === 'paxi' ? paxiService : ''))?.rate ?? 0;
+  const shippingAmount = (() => {
+    if (shippingMethod === 'paxi') {
+      return paxiRate;
+    }
+    if (isFreeShipping) return 0;
+    if (selectedQuote) return selectedQuote.rate;
+    if (shippingState === 'error') return 120;
+    return 0;
+  })();
   const vat = Math.round((rawSubtotal - discountAmount) * 0.15); // 15% South African VAT included
   const total = Math.max(0, rawSubtotal - discountAmount + shippingAmount);
 
@@ -175,7 +199,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         subtotal: rawSubtotal,
         discount: discountAmount,
         shipping: shippingAmount,
-        courierService: selectedQuote?.code,
+        courierService: shippingMethod === 'courier' ? selectedQuote?.code : undefined,
+        shippingMethod,
+        paxiService: shippingMethod === 'paxi' ? paxiService : undefined,
+        paxiPointCode: shippingMethod === 'paxi' ? paxiPoint?.code : undefined,
+        paxiStoreName: shippingMethod === 'paxi' ? paxiPoint?.name : undefined,
+        recipientMobile: customer.phone,
         total,
         currency,
         paymentMethod,
@@ -236,6 +265,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       aria-modal="true"
       className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6"
     >
+      <PaxiPointPicker
+        isOpen={paxiPickerOpen}
+        locatorUrl={paxiPointLocatorUrl}
+        locatorOrigin={paxiPointLocatorOrigin}
+        onSelect={(point) => { setPaxiPoint(point); setPaxiPickerOpen(false); }}
+        onClose={() => setPaxiPickerOpen(false)}
+      />
       <div className="relative w-full max-w-4xl bg-white border border-stone-200 shadow-2xl rounded-xs overflow-hidden my-6">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-900 text-stone-100">
@@ -360,49 +396,100 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <div className="pt-4 mt-1 border-t border-stone-200">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[11px] font-mono text-stone-600 uppercase tracking-wider">
-                      Courier Delivery · The Courier Guy
+                      Shipping · Courier Delivery · The Courier Guy
                     </span>
                     {shippingState === 'loading' && <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-400" />}
                   </div>
 
-                  {shippingQuotes.length > 0 ? (
-                    <div className="space-y-2">
-                      {shippingQuotes.map((q) => {
-                        const active = selectedQuote?.code === q.code;
-                        return (
-                          <button
-                            type="button"
-                            key={q.code}
-                            onClick={() => setSelectedShipping(q.code)}
-                            className={`w-full flex items-center justify-between gap-3 p-2.5 border rounded-xs text-left transition-all cursor-pointer ${
-                              active
-                                ? 'border-stone-900 bg-stone-900 text-white shadow-xs'
-                                : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                            }`}
-                          >
-                            <span className="flex flex-col min-w-0">
-                              <span className="text-xs font-semibold">{q.name}</span>
-                              {q.description && (
-                                <span className={`text-[10px] font-mono ${active ? 'text-stone-300' : 'text-stone-500'}`}>
-                                  {q.description}
-                                </span>
-                              )}
-                            </span>
-                            <span className="font-mono text-xs font-bold tabular-nums shrink-0">
-                              {q.rate === 0 ? 'Free' : formatPrice(q.rate, currency)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                  {/* Shipping method selector */}
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setShippingMethod('courier')}
+                      className={`p-3 border rounded text-left flex items-center justify-between ${shippingMethod === 'courier' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-stone-50 hover:bg-stone-100'}`}
+                    >
+                      <span className="text-xs font-semibold">Doorstep Courier</span>
+                      <Truck className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShippingMethod('paxi')}
+                      disabled={!paxiEnabled}
+                      className={`p-3 border rounded text-left flex items-center justify-between ${shippingMethod === 'paxi' ? 'border-emerald-800 bg-emerald-950 text-white' : 'border-emerald-300 bg-emerald-50/60 text-stone-700 hover:bg-emerald-50'} ${!paxiEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <span className="text-xs font-semibold">PAXI Store-to-Store</span>
+                      <MapPin className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {shippingMethod === 'courier' ? (
+                    shippingQuotes.length > 0 ? (
+                      <div className="space-y-2">
+                        {shippingQuotes.filter(q => !q.code.startsWith('PAXI_')).map((q) => {
+                          const active = selectedQuote?.code === q.code;
+                          return (
+                            <button
+                              type="button"
+                              key={q.code}
+                              onClick={() => setSelectedShipping(q.code)}
+                              className={`w-full flex items-center justify-between gap-3 p-2.5 border rounded-xs text-left transition-all cursor-pointer ${
+                                active
+                                  ? 'border-stone-900 bg-stone-900 text-white shadow-xs'
+                                  : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                              }`}
+                            >
+                              <span className="flex flex-col min-w-0">
+                                <span className="text-xs font-semibold">{q.name}</span>
+                                {q.description && (
+                                  <span className={`text-[10px] font-mono ${active ? 'text-stone-300' : 'text-stone-500'}`}>
+                                    {q.description}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="font-mono text-xs font-bold tabular-nums shrink-0">
+                                {q.rate === 0 ? 'Free' : formatPrice(q.rate, currency)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-stone-500 leading-relaxed">
+                        {freeShippingThreshold > 0 && rawSubtotal >= freeShippingThreshold
+                          ? 'Free nationwide courier unlocked on this order.'
+                          : shippingState === 'error'
+                            ? 'Live rates are unavailable right now — a standard R120 courier applies.'
+                            : 'Enter your city and postal code to see live courier rates.'}
+                      </p>
+                    )
                   ) : (
-                    <p className="text-[11px] text-stone-500 leading-relaxed">
-                      {freeShippingThreshold > 0 && rawSubtotal >= freeShippingThreshold
-                        ? 'Free nationwide courier unlocked on this order.'
-                        : shippingState === 'error'
-                          ? 'Live rates are unavailable right now — a standard R120 courier applies.'
-                          : 'Enter your city and postal code to see live courier rates.'}
-                    </p>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        {['PAXI_ECO', 'PAXI_SPEED'].map((code) => {
+                          const isActive = paxiService === code;
+                          const q = shippingQuotes.find(q => q.code === code);
+                          const rate = q?.rate ?? (code === 'PAXI_ECO' ? 59.95 : 109.95);
+                          return (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => setPaxiService(code as any)}
+                              className={`p-3 border rounded text-left ${isActive ? 'border-emerald-800 bg-emerald-950 text-white' : 'border-emerald-300 bg-emerald-50/60 text-stone-700'}`}
+                            >
+                              <div className="text-xs font-semibold">{code === 'PAXI_ECO' ? 'Economy' : 'Speed'}</div>
+                              <div className="text-[10px] font-mono">{formatPrice(rate, currency)}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPaxiPickerOpen(true)}
+                        className="w-full p-3 border border-emerald-300 bg-emerald-50 rounded text-xs font-semibold"
+                      >
+                        {paxiPoint ? `Selected: ${paxiPoint.code} — ${paxiPoint.name} (change)` : 'Select your PAXI Collection Point'}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

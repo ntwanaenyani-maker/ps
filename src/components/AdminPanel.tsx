@@ -12,6 +12,7 @@ import {
   Webhook,
   LogOut,
   Truck,
+  Download,
 } from 'lucide-react';
 
 const ADMIN_KEY_STORAGE = 'phethagatsa_admin_key';
@@ -36,6 +37,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [saveError, setSaveError] = useState('');
+
+  const handleExportPaxi = async () => {
+    try {
+      const res = await fetch(`/api/admin/orders/paxi/export`, {
+        headers: { 'X-API-Key': adminKey.trim() },
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'paxi_orders.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setSaveMessage('PAXI CSV downloaded');
+    } catch (e: any) {
+      setSaveError(e.message || 'Could not export');
+    }
+  };
 
   const loadGateways = useCallback(async (key: string) => {
     setLoading(true);
@@ -313,65 +335,81 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               </button>
             </section>
 
-            {/* Webhooks */}
-            <section className="pt-4 border-t border-stone-200">
-              <h3 className="text-xs font-mono uppercase tracking-wider text-stone-900 font-bold mb-3 flex items-center gap-2">
-                <Webhook className="w-4 h-4" />
-                <span>Webhooks</span>
-              </h3>
-              <div className="p-3.5 border border-stone-200 rounded-xs bg-stone-50 space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-semibold text-stone-900">PayPal notifications</span>
-                  <span
-                    className={`text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-xs border ${
-                      webhooks?.paypal.configured
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}
-                  >
-                    {webhooks?.paypal.configured ? 'active' : 'pending id'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-stone-500">
-                  Paste this URL into the PayPal Developer Dashboard → your app → Webhooks. Subscribe to
-                  <span className="font-mono"> PAYMENT.CAPTURE.COMPLETED</span>,
-                  <span className="font-mono"> PAYMENT.CAPTURE.DENIED</span>,
-                  <span className="font-mono"> PAYMENT.CAPTURE.REFUNDED</span>.
-                </p>
-                <code className="block w-full text-[11px] font-mono bg-white border border-stone-200 rounded-xs px-2.5 py-2 text-stone-800 break-all">
-                  {webhooks?.paypal.url || '—'}
-                </code>
-              </div>
+              {/* Webhooks */}
+             <section className="pt-4 border-t border-stone-200">
+               <h3 className="text-xs font-mono uppercase tracking-wider text-stone-900 font-bold mb-3 flex items-center gap-2">
+                 <Webhook className="w-4 h-4" />
+                 <span>Webhooks</span>
+               </h3>
+               <div className="p-3.5 border border-stone-200 rounded-xs bg-stone-50 space-y-2">
+                 <div className="flex items-center justify-between gap-3">
+                   <span className="text-sm font-semibold text-stone-900">PayPal notifications</span>
+                   <span
+                     className={`text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-xs border ${
+                       webhooks?.paypal.configured
+                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                         : 'bg-amber-50 text-amber-700 border-amber-200'
+                     }`}
+                   >
+                     {webhooks?.paypal.configured ? 'active' : 'pending id'}
+                   </span>
+                 </div>
+                 <p className="text-[11px] text-stone-500">
+                   Paste this URL into the PayPal Developer Dashboard → your app → Webhooks. Subscribe to
+                   <span className="font-mono"> PAYMENT.CAPTURE.COMPLETED</span>,
+                   <span className="font-mono"> PAYMENT.CAPTURE.DENIED</span>,
+                   <span className="font-mono"> PAYMENT.CAPTURE.REFUNDED</span>.
+                 </p>
+                 <code className="block w-full text-[11px] font-mono bg-white border border-stone-200 rounded-xs px-2.5 py-2 text-stone-800 break-all">
+                   {webhooks?.paypal.url || '—'}
+                 </code>
+               </div>
 
-              <div className="mt-3 p-3.5 border border-stone-200 rounded-xs bg-stone-50 space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-semibold text-stone-900 flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-stone-500" />
-                    The Courier Guy · tracking
-                  </span>
-                  <span
-                    className={`text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-xs border ${
-                      courier?.configured
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}
-                  >
-                    {courier?.configured ? 'active' : 'not configured'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-stone-500">
-                  Live delivery rates at checkout via The Courier Guy (service levels:
-                  <span className="font-mono"> {courier?.serviceLevels?.join(', ') || 'ECO, PRI'} </span>
-                  ). In the Shiplogic / The Courier Guy portal, add a webhook to this URL subscribed to
-                  <span className="font-mono"> tracking-event</span>,
-                  <span className="font-mono"> shipment-note</span>,
-                  <span className="font-mono"> parcel-dimension-changes</span>.
-                </p>
-                <code className="block w-full text-[11px] font-mono bg-white border border-stone-200 rounded-xs px-2.5 py-2 text-stone-800 break-all">
-                  {webhooks?.courierguy?.url || '—'}
-                </code>
-              </div>
-            </section>
+               <div className="mt-3 p-3.5 border border-stone-200 rounded-xs bg-stone-50 space-y-2">
+                 <div className="flex items-center justify-between gap-3">
+                   <span className="text-sm font-semibold text-stone-900 flex items-center gap-2">
+                     <Truck className="w-4 h-4 text-stone-500" />
+                     The Courier Guy · tracking
+                   </span>
+                   <span
+                     className={`text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-xs border ${
+                       courier?.configured
+                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                         : 'bg-amber-50 text-amber-700 border-amber-200'
+                     }`}
+                   >
+                     {courier?.configured ? 'active' : 'not configured'}
+                   </span>
+                 </div>
+                 <p className="text-[11px] text-stone-500">
+                   Live delivery rates at checkout via The Courier Guy (service levels:
+                   <span className="font-mono"> {courier?.serviceLevels?.join(', ') || 'ECO, PRI'} </span>
+                   ). In the Shiplogic / The Courier Guy portal, add a webhook to this URL subscribed to
+                   <span className="font-mono"> tracking-event</span>,
+                   <span className="font-mono"> shipment-note</span>,
+                   <span className="font-mono"> parcel-dimension-changes</span>.
+                 </p>
+                 <code className="block w-full text-[11px] font-mono bg-white border border-stone-200 rounded-xs px-2.5 py-2 text-stone-800 break-all">
+                   {webhooks?.courierguy?.url || '—'}
+                 </code>
+               </div>
+             </section>
+
+             {/* PAXI Export */}
+             <section className="pt-4 border-t border-stone-200">
+               <div className="flex items-center justify-between">
+                 <h3 className="text-xs font-mono uppercase tracking-wider text-stone-900 font-bold">PAXI Store-to-Store Export</h3>
+                 <button
+                   onClick={handleExportPaxi}
+                   className="text-[11px] font-mono text-stone-600 hover:text-stone-900 flex items-center gap-1 cursor-pointer"
+                 >
+                   <Download className="w-3.5 h-3.5" />
+                   Export CSV
+                 </button>
+               </div>
+               <p className="text-[11px] text-stone-500 mt-1">Download paid PAXI orders for the PEP PAXI Business Portal. The CSV contains: Recipient Full Name, Recipient Cellphone Number, Destination PAXI Point Code, Parcel Size.</p>
+             </section>
+
           </div>
         )}
 

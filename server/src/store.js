@@ -257,6 +257,55 @@ export const orders = {
       ) || null
     );
   },
+  // PAXI Store-to-Store orders awaiting bulk export. By default only
+  // paid, not-yet-exported orders are returned.
+  async listPaxi({ includeExported = false, includeUnpaid = false } = {}) {
+    if (mode === 'mongodb') {
+      const filter = { shippingMethod: 'paxi' };
+      if (!includeExported) filter.isExportedToPaxi = { $ne: true };
+      if (!includeUnpaid) filter.paymentStatus = 'paid';
+      return Order.find(filter).sort({ createdAt: 1 });
+    }
+    return memory.orders.filter(
+      (o) =>
+        o.shippingMethod === 'paxi' &&
+        (includeExported || !o.isExportedToPaxi) &&
+        (includeUnpaid || o.paymentStatus === 'paid')
+    );
+  },
+  async markPaxiExported(orderNumbers) {
+    if (!Array.isArray(orderNumbers) || orderNumbers.length === 0) return 0;
+    if (mode === 'mongodb') {
+      const res = await Order.updateMany(
+        { orderNumber: { $in: orderNumbers }, shippingMethod: 'paxi' },
+        { $set: { isExportedToPaxi: true, paxiExportedAt: new Date() } }
+      );
+      return res.modifiedCount || 0;
+    }
+    let count = 0;
+    memory.orders.forEach((o) => {
+      if (o.shippingMethod === 'paxi' && orderNumbers.includes(o.orderNumber)) {
+        o.isExportedToPaxi = true;
+        o.paxiExportedAt = new Date().toISOString();
+        count += 1;
+      }
+    });
+    return count;
+  },
+  async paxiCounts() {
+    if (mode === 'mongodb') {
+      const [pending, exported] = await Promise.all([
+        Order.countDocuments({ shippingMethod: 'paxi', isExportedToPaxi: { $ne: true }, paymentStatus: 'paid' }),
+        Order.countDocuments({ shippingMethod: 'paxi', isExportedToPaxi: true }),
+      ]);
+      return { pending, exported };
+    }
+    const all = memory.orders.filter((o) => o.shippingMethod === 'paxi');
+    return {
+      pending: all.filter((o) => !o.isExportedToPaxi && o.paymentStatus === 'paid').length,
+      exported: all.filter((o) => o.isExportedToPaxi).length,
+    };
+  },
   async update(ref, patch) {
     if (mode === 'mongodb') return Order.findOneAndUpdate({ orderNumber: ref }, { $set: patch }, { new: true });
     const o = memory.orders.find((x) => x.orderNumber === ref);

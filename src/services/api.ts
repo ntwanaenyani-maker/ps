@@ -98,6 +98,11 @@ export interface CheckoutPayload {
   discount?: number;
   shipping?: number;
   courierService?: string;
+  shippingMethod?: 'courier' | 'paxi';
+  paxiService?: 'PAXI_ECO' | 'PAXI_SPEED';
+  paxiPointCode?: string;
+  paxiStoreName?: string;
+  recipientMobile?: string;
   total: number;
   currency?: string;
   paymentMethod?: string;
@@ -394,6 +399,11 @@ export interface AdminGatewaysResponse {
     apiKeySet: boolean;
     serviceLevels: string[];
   };
+  paxi?: {
+    enabled: boolean;
+    pointLocatorUrl: string;
+    pointLocatorOrigin: string;
+  };
 }
 
 export interface ShippingQuote {
@@ -419,6 +429,9 @@ export interface ShippingQuoteResponse {
   subtotal: number;
   quotes: ShippingQuote[];
   error?: string;
+  paxiEnabled?: boolean;
+  paxiPointLocatorUrl?: string;
+  paxiPointLocatorOrigin?: string;
 }
 
 export interface ShippingStatus {

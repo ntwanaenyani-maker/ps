@@ -389,6 +389,70 @@ function fallbackQuote(defaultShipping, reason) {
   };
 }
 
+// ---- PAXI (PEP Store-to-Store) -------------------------------------------
+// PAXI has no public checkout API for small merchants: pricing is fixed per
+// bag size/speed and the customer picks a collection point via the Point
+// Locator widget (an iframe that posts a `{trg:'paxi', point}` message).
+const PAXI_VAT_RATE = 1.15;
+// PAXI Point Locator widget (advanced embed). `output=nc,sn` makes the
+// widget return the PAXI point code (e.g. P8114) and store short name.
+const PAXI_POINT_LOCATOR_URL =
+  (process.env.PAXI_POINT_LOCATOR_URL ||
+    'https://map.paxi.co.za?size=l,m,s&status=1,3,4&maxordervalue=1000&output=nc,sn'
+  ).trim();
+const PAXI_POINT_LOCATOR_ORIGIN = (process.env.PAXI_POINT_LOCATOR_ORIGIN || 'https://map.paxi.co.za').trim();
+
+async function paxiSettings() {
+  const s = await settings.get();
+  const val = (s && typeof s.toObject === 'function' ? s.toObject() : s) || {};
+  const p = (val.paxiShipping && typeof val.paxiShipping === 'object' ? val.paxiShipping : {}) || {};
+  return {
+    enabled: val.paxiEnabled === undefined ? true : Boolean(val.paxiEnabled),
+    economy: Number(p.economy) || Number(process.env.PAXI_ECONOMY_RATE) || 59.95,
+    speed: Number(p.speed) || Number(process.env.PAXI_SPEED_RATE) || 109.95,
+    pointLocatorUrl: PAXI_POINT_LOCATOR_URL,
+    pointLocatorOrigin: PAXI_POINT_LOCATOR_ORIGIN,
+  };
+}
+
+function paxiOptions(ps) {
+  return [
+    {
+      code: 'PAXI_ECO',
+      name: 'PAXI Store-to-Store · Economy',
+      description: 'Collect from any PEP / Tekkie Town / Shoe City PAXI point · 7 - 9 business days · up to 5kg',
+      rate: Math.round(ps.economy * 100) / 100,
+      rateExcludingVat: Math.round((ps.economy / PAXI_VAT_RATE) * 100) / 100,
+    },
+    {
+      code: 'PAXI_SPEED',
+      name: 'PAXI Store-to-Store · Speed',
+      description: 'Collect from any PEP / Tekkie Town / Shoe City PAXI point · 3 - 5 business days · up to 5kg',
+      rate: Math.round(ps.speed * 100) / 100,
+      rateExcludingVat: Math.round((ps.speed / PAXI_VAT_RATE) * 100) / 100,
+    },
+  ];
+}
+
+// PAXI point codes look like `P` followed by 3 - 5 digits (e.g. P8114).
+function normalizePaxiPointCode(code) {
+  const cleaned = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return /^P\d{3,5}$/.test(cleaned) ? cleaned : null;
+}
+
+// Validate + normalise a South African mobile number to 0XX XXX XXXX.
+function normalizeSaMobile(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length === 10 && digits.startsWith('0')) return digits;
+  if (digits.length === 11 && digits.startsWith('27')) return `0${digits.slice(2)}`;
+  return null;
+}
+
+function csvEscape(value) {
+  const s = String(value ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // ---- email + OTP helpers ------------------------------------------------------
@@ -791,29 +855,45 @@ app.post(
     const user = await sessions.findUserByToken(extractToken(req));
 
     const doc = {
-      orderNumber: generateOrderNumber(),
-      userId: user?.id ?? null,
-      customerName: customer.fullName.trim(),
-      customerEmail: customer.email.trim().toLowerCase(),
-      customerPhone: customer.phone.trim(),
-      shippingAddress: customer.address.trim(),
-      city: customer.city.trim(),
-      province: customer.province?.trim() || null,
-      postalCode: customer.postalCode.trim(),
-      country: customer.country?.trim() || 'South Africa',
-      items: body.items,
-      subtotal: Number(body.subtotal) || 0,
-      discount: Number(body.discount) || 0,
-      shipping: Number(body.shipping) || 0,
-      courierService: body.courierService || null,
-      tax: 0,
-      total: Number(body.total) || 0,
-      currency: body.currency || 'ZAR',
-      paymentMethod,
-      paymentStatus: 'pending',
-      status: 'pending',
-      notes: body.notes || null,
-    };
+        orderNumber: generateOrderNumber(),
+        userId: user?.id ?? null,
+        customerName: customer.fullName.trim(),
+        customerEmail: customer.email.trim().toLowerCase(),
+        customerPhone: customer.phone.trim(),
+        shippingAddress: customer.address.trim(),
+        city: customer.city.trim(),
+        province: customer.province?.trim() || null,
+        postalCode: customer.postalCode.trim(),
+        country: customer.country?.trim() || 'South Africa',
+        items: body.items,
+        subtotal: Number(body.subtotal) || 0,
+        discount: Number(body.discount) || 0,
+        shipping: Number(body.shipping) || 0,
+        courierService: body.courierService || null,
+        tax: 0,
+        total: Number(body.total) || 0,
+        currency: body.currency || 'ZAR',
+        paymentMethod,
+        paymentStatus: 'pending',
+        status: 'pending',
+        notes: body.notes || null,
+        shippingMethod: body.shippingMethod || 'courier',
+        paxiService: body.paxiService || null,
+        paxiPointCode: normalizePaxiPointCode(body.paxiPointCode),
+        paxiStoreName: body.paxiStoreName ? String(body.paxiStoreName).trim() : null,
+        recipientMobile: normalizeSaMobile(body.recipientMobile || customer.phone),
+      };
+
+      if (!doc.recipientMobile) {
+        return res.status(400).json({ error: 'South African mobile number is required for PAXI' });
+      }
+      if (doc.shippingMethod === 'paxi') {
+        if (!doc.paxiPointCode || !doc.paxiStoreName) {
+          return res.status(400).json({ error: 'PAXI point code and store name are required' });
+        }
+        // Optionally enforce parcel weight up to 5 kg for standard PAXI bags.
+        // For simplicity we trust the client and keep the server stateless.
+      }
 
     let created;
     for (let attempt = 0; attempt < 3 && !created; attempt++) {
@@ -859,7 +939,7 @@ app.get(
   })
 );
 
-// ---- shipping (The Courier Guy) -----------------------------------------------
+// ---- shipping (The Courier Guy + PAXI) -------------------------------------------
 app.post(
   '/api/shipping/quote',
   wrap(async (req, res) => {
@@ -873,15 +953,20 @@ app.post(
       return res.status(400).json({ error: 'Suburb/city and postal code are required for a delivery quote' });
     }
 
+    const pax = await paxiSettings();
+
     const base = {
       success: true,
-      provider: 'The Courier Guy',
+      provider: 'The Courier Guy / PAXI',
       currency: 'ZAR',
       configured: courierGuyConfigured(),
       freeShipping,
       freeShippingThreshold,
       defaultShipping,
       subtotal,
+      paxiEnabled: pax.enabled,
+      paxiPointLocatorUrl: pax.pointLocatorUrl,
+      paxiPointLocatorOrigin: pax.pointLocatorOrigin,
     };
 
     if (freeShipping) {
@@ -895,51 +980,56 @@ app.post(
             rate: 0,
             rateExcludingVat: 0,
           },
+          ...(pax.enabled ? paxiOptions(pax) : []),
         ],
       });
     }
 
+    const quotes = [];
     if (!courierGuyConfigured()) {
-      return res.json({ ...base, quotes: [fallbackQuote(defaultShipping, 'not_configured')] });
-    }
-
-    try {
-      const collection = await courierCollectionAddress();
-      const data = await courierGuyRequest('/rates', {
-        method: 'POST',
-        body: {
-          collection_address: collection,
-          delivery_address: courierDeliveryAddress(customer),
-          parcels: courierParcels(body.items),
-        },
-      });
-      const quotes = (Array.isArray(data.rates) ? data.rates : [])
-        .map((r) => {
-          const sl = r.service_level || {};
-          return {
-            code: sl.code || '',
-            name: sl.name || sl.code || 'Courier',
-            description: sl.description || '',
-            rate: Math.round(Number(r.rate) * 100) / 100,
-            rateExcludingVat: Math.round(Number(r.rate_excluding_vat) * 100) / 100,
-            deliveryDateFrom: sl.delivery_date_from || null,
-            deliveryDateTo: sl.delivery_date_to || null,
-          };
-        })
-        .filter((q) => Number.isFinite(q.rate) && q.rate >= 0);
-      if (!quotes.length) {
-        return res.json({ ...base, quotes: [fallbackQuote(defaultShipping, 'no_rates')] });
+      quotes.push(fallbackQuote(defaultShipping, 'not_configured'));
+    } else {
+      try {
+        const collection = await courierCollectionAddress();
+        const data = await courierGuyRequest('/rates', {
+          method: 'POST',
+          body: {
+            collection_address: collection,
+            delivery_address: courierDeliveryAddress(customer),
+            parcels: courierParcels(body.items),
+          },
+        });
+        const courierQuotes = (Array.isArray(data.rates) ? data.rates : [])
+          .map((r) => {
+            const sl = r.service_level || {};
+            return {
+              code: sl.code || '',
+              name: sl.name || sl.code || 'Courier',
+              description: sl.description || '',
+              rate: Math.round(Number(r.rate) * 100) / 100,
+              rateExcludingVat: Math.round(Number(r.rate_excluding_vat) * 100) / 100,
+              deliveryDateFrom: sl.delivery_date_from || null,
+              deliveryDateTo: sl.delivery_date_to || null,
+            };
+          })
+          .filter((q) => Number.isFinite(q.rate) && q.rate >= 0);
+        if (courierQuotes.length) {
+          quotes.push(...courierQuotes);
+        } else {
+          quotes.push(fallbackQuote(defaultShipping, 'no_rates'));
+        }
+        return res.json({ ...base, collection, quotes: [...quotes, ...(pax.enabled ? paxiOptions(pax) : [])] });
+      } catch (err) {
+        console.warn('[courier guy] quote failed:', err.message);
+        quotes.push(fallbackQuote(defaultShipping, 'quote_failed'));
       }
-      res.json({ ...base, collection, quotes });
-    } catch (err) {
-      console.warn('[courier guy] quote failed:', err.message);
-      res.json({
-        ...base,
-        configured: false,
-        error: 'Courier quote unavailable',
-        quotes: [fallbackQuote(defaultShipping, 'quote_failed')],
-      });
     }
+    res.json({
+      ...base,
+      configured: false,
+      error: 'Courier quote unavailable',
+      quotes: [...quotes, ...(pax.enabled ? paxiOptions(pax) : [])],
+    });
   })
 );
 
@@ -1343,6 +1433,11 @@ app.get(
         apiKeySet: courierGuyConfigured(),
         serviceLevels: COURIER_GUY_SERVICE_LEVELS,
       },
+      paxi: {
+        enabled: (await paxiSettings()).enabled,
+        pointLocatorUrl: (await paxiSettings()).pointLocatorUrl,
+        pointLocatorOrigin: (await paxiSettings()).pointLocatorOrigin,
+      },
     });
   })
 );
@@ -1454,17 +1549,48 @@ app.post(
   })
 );
 
-// The Courier Guy (Shiplogic) tracking webhook. In the Shiplogic / The Courier
-// Guy portal, create a webhook to this URL subscribed to `tracking-event`
-// (and optionally `shipment-note`, `parcel-dimension-changes`).
-app.post(
-  '/api/webhooks/courierguy',
+// ---- admin: PAXI CSV export -------------------------------------------------
+app.get(
+  '/api/admin/orders/paxi/export',
   wrap(async (req, res) => {
-    const secret = process.env.COURIER_GUY_WEBHOOK_SECRET;
-    if (secret) {
-      const provided = req.headers['x-courierguy-secret'] || req.headers['x-webhook-secret'] || req.query.secret;
-      if (provided !== secret) return res.status(401).json({ error: 'Invalid webhook secret' });
+    if (!requireAdmin(req, res)) return;
+    const preview = String(req.query.preview || '').toLowerCase() === '1';
+    const ordersList = await orders.listPaxi({ includeExported: false });
+    const rows = Array.isArray(ordersList) ? ordersList : [];
+    if (!rows.length) {
+      if (!preview) {
+        res.set('Content-Type', 'text/csv');
+        res.set('Content-Disposition', 'attachment; filename="paxi_orders.csv"');
+        return res.send('Recipient Full Name,Recipient Cellphone Number,Destination PAXI Point Code,Parcel Size\n');
+      }
+      return res.json({ success: true, count: 0, preview: true });
     }
+
+    const header = ['Recipient Full Name', 'Recipient Cellphone Number', 'Destination PAXI Point Code', 'Parcel Size'];
+    const lines = [header.map(csvEscape).join(',')];
+
+    for (const o of rows) {
+      const doc = typeof o.toObject === 'function' ? o.toObject() : { ...o };
+      const name = doc.customerName || '';
+      const phone = doc.recipientMobile || doc.customerPhone || '';
+      const code = doc.paxiPointCode || '';
+      lines.push([csvEscape(name), csvEscape(phone), csvEscape(code), csvEscape('Standard')].join(','));
+    }
+
+    const csv = lines.join('\n');
+    if (preview) {
+      return res.json({ success: true, count: rows.length, preview: true, sample: lines.slice(0, 6).join('\n') });
+    }
+
+    // Mark as exported only on the real download.
+    const orderNumbers = rows.map((o) => (typeof o === 'object' ? o.orderNumber : o)).filter(Boolean);
+    await orders.markPaxiExported(orderNumbers);
+
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', 'attachment; filename="paxi_orders.csv"');
+    res.send(csv);
+  })
+);
 
     const body = req.body || {};
     const reference =

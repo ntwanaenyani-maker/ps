@@ -101,6 +101,15 @@ const OrderSchema = new Schema(
     courierTrackingStatus: { type: String, default: null },
     courierTrackingMessage: { type: String, default: null },
     courierLastEvent: { type: Date, default: null },
+    // PAXI Store-to-Store delivery: the customer collects from a PEP /
+    // Tekkie Town / Shoe City PAXI point instead of doorstep courier.
+    shippingMethod: { type: String, default: 'courier', index: true },
+    paxiService: { type: String, default: null },
+    paxiPointCode: { type: String, default: null },
+    paxiStoreName: { type: String, default: null },
+    recipientMobile: { type: String, default: null },
+    isExportedToPaxi: { type: Boolean, default: false },
+    paxiExportedAt: { type: Date, default: null },
     paidAt: { type: Date, default: null },
     status: { type: String, default: 'pending' },
     notes: { type: String, default: null },
@@ -131,6 +140,13 @@ const SettingsSchema = new Schema(
     },
     defaultShipping: { type: Number, default: 65 },
     freeShippingThreshold: { type: Number, default: 450 },
+    // PAXI Store-to-Store shipping option. `enabled` toggles the whole
+    // PAXI flow; `prices` holds the ZAR rates per speed tier.
+    paxiEnabled: { type: Boolean, default: true },
+    paxiShipping: {
+      type: Schema.Types.Mixed,
+      default: { economy: 59.95, speed: 109.95 },
+    },
   },
   { collection: 'settings', timestamps: true }
 );
@@ -213,6 +229,13 @@ export function mapOrder(row) {
     createdAt: createdAt.toISOString(),
     estimatedDelivery,
     trackingNumber: o.courierTrackingReference || o.notes || undefined,
+    shippingMethod: o.shippingMethod || 'courier',
+    paxiService: o.paxiService ?? null,
+    paxiPointCode: o.paxiPointCode ?? null,
+    paxiStoreName: o.paxiStoreName ?? null,
+    recipientMobile: o.recipientMobile ?? null,
+    isExportedToPaxi: Boolean(o.isExportedToPaxi),
+    paxiExportedAt: o.paxiExportedAt ?? null,
     notes: o.notes ?? undefined,
   };
 }

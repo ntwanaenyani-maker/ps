@@ -129,6 +129,14 @@ export interface Order {
   courierTrackingReference?: string | null;
   courierShipmentId?: string | null;
   courierTrackingStatus?: string | null;
+  // PAXI Store-to-Store
+  shippingMethod?: 'courier' | 'paxi';
+  paxiService?: 'PAXI_ECO' | 'PAXI_SPEED' | null;
+  paxiPointCode?: string | null;
+  paxiStoreName?: string | null;
+  recipientMobile?: string | null;
+  isExportedToPaxi?: boolean;
+  paxiExportedAt?: string | null;
   timeline?: OrderTimelineEvent[];
   notes?: string;
 }

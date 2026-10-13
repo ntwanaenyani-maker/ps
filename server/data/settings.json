@@ -15,5 +15,10 @@
     "cod": { "enabled": false }
   },
   "defaultShipping": 75,
-  "freeShippingThreshold": 450
+  "freeShippingThreshold": 450,
+  "paxiEnabled": true,
+  "paxiShipping": {
+    "economy": 59.95,
+    "speed": 109.95
+  }
 }
